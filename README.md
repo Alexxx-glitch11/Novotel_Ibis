@@ -1,66 +1,89 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# RRMS Novotel ibis
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Panduan untuk menyiapkan dan menjalankan aplikasi di komputer lokal setelah mengambil source code dari GitHub.
 
-## About Laravel
+## Teknologi
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- PHP 8.2 atau lebih baru
+- Laravel 12
+- MySQL
+- Composer
+- Node.js dan npm
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Persiapan
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+Pastikan Git, PHP, Composer, Node.js/npm, dan MySQL sudah terpasang. Jika menggunakan Laragon, jalankan layanan MySQL sebelum menyiapkan database.
 
-## Learning Laravel
+## Instalasi dari GitHub
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+1. Buka PowerShell atau terminal, lalu clone repository. Ganti URL berikut dengan URL repository GitHub yang benar:
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+   ```powershell
+   git clone https://github.com/USERNAME/NAMA-REPOSITORY.git
+   cd NAMA-REPOSITORY
+   ```
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+2. Pasang dependensi PHP dan JavaScript:
 
-## Laravel Sponsors
+   ```powershell
+   composer install
+   npm install
+   ```
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+3. Buat file konfigurasi lokal `.env`:
 
-### Premium Partners
+   ```powershell
+   Copy-Item .env.example .env
+   ```
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
+4. Buat database MySQL bernama `rrms_novobis` melalui phpMyAdmin atau MySQL. Sesuaikan pengaturan database pada `.env` dengan konfigurasi lokal:
 
-## Contributing
+   ```dotenv
+   DB_CONNECTION=mysql
+   DB_HOST=127.0.0.1
+   DB_PORT=3306
+   DB_DATABASE=rrms_novobis
+   DB_USERNAME=root
+   DB_PASSWORD=
+   ```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+   Jika MySQL menggunakan password, isi nilai `DB_PASSWORD` sesuai password tersebut.
 
-## Code of Conduct
+5. Buat application key dan jalankan migrasi database:
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+   ```powershell
+   php artisan key:generate
+   php artisan migrate
+   ```
 
-## Security Vulnerabilities
+   Untuk sekaligus menjalankan seeder bawaan (membuat data pengguna contoh), gunakan `php artisan migrate --seed` sebagai pengganti perintah migrasi di atas.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+6. Build aset frontend:
 
-## License
+   ```powershell
+   npm run build
+   ```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+## Menjalankan aplikasi
+
+Jalankan server Laravel:
+
+```powershell
+php artisan serve
+```
+
+Buka alamat yang ditampilkan di terminal, biasanya <http://127.0.0.1:8000>.
+
+Untuk pengembangan frontend dengan Vite, jalankan `npm run dev` di terminal terpisah dan biarkan prosesnya tetap berjalan. Gunakan `npm run build` kembali untuk membuat build frontend.
+
+## Menjalankan test
+
+```powershell
+php artisan test
+```
+
+## Troubleshooting
+
+- **Koneksi database gagal:** pastikan MySQL aktif, database sudah dibuat, dan nilai `DB_*` di `.env` benar.
+- **Perubahan `.env` belum terbaca:** jalankan `php artisan config:clear`.
+- **Perintah Composer/npm tidak ditemukan:** pastikan Composer dan Node.js sudah terpasang dan tersedia di `PATH`, lalu buka terminal baru.
