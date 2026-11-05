@@ -21,3 +21,7 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# Local dependency backups
+composer.json.backup
+composer.lock.backup
