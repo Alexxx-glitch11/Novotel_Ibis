@@ -47,6 +47,15 @@ return [
             'report' => false,
         ],
 
+        'menu_uploads' => [
+            'driver' => 'local',
+            'root' => public_path('uploads/menu-items'),
+            'url' => env('APP_URL').'/uploads/menu-items',
+            'visibility' => 'public',
+            'throw' => true,
+            'report' => true,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

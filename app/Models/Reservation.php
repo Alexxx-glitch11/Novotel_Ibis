@@ -83,6 +83,11 @@ class Reservation extends Model
         return $this->hasMany(Payment::class, 'reservations_id', 'reservations_id');
     }
 
+    public function latestPayment(): HasOne
+    {
+        return $this->hasOne(Payment::class, 'reservations_id', 'reservations_id')->latestOfMany('payments_id');
+    }
+
     public function checkIns(): HasMany
     {
         return $this->hasMany(CheckIn::class, 'reservations_id', 'reservations_id');
