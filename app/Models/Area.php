@@ -20,6 +20,7 @@ class Area extends Model
         'outlets_id',
         'name',
         'description',
+        'floor_plan_path',
         'is_active',
     ];
 
@@ -38,5 +39,12 @@ class Area extends Model
     public function tables(): HasMany
     {
         return $this->hasMany(Table::class, 'areas_id', 'areas_id');
+    }
+
+    public function getFloorPlanUrlAttribute(): ?string
+    {
+        return $this->floor_plan_path
+            ? asset('storage/' . ltrim($this->floor_plan_path, '/'))
+            : null;
     }
 }
