@@ -1,12 +1,31 @@
 @import 'tailwindcss';
 
-@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
-@source '../../storage/framework/views/*.php';
-@source "../**/*.blade.php";
-@source "../**/*.js";
-@source "../**/*.vue";
+@source '../**/*.blade.php';
+@source '../**/*.js';
 
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-        'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    --color-page: #f4f7f8;
+    --color-novotel: #4a3f8f;
+    --color-novotel-dark: #2c2563;
+    --color-ibis: #d3202f;
+    --color-ibis-dark: #a3121f;
+}
+
+/* Titik penanda slider (dibuat oleh JS, jadi distyle di sini) */
+.hero-dots button {
+    width: 11px; height: 11px; padding: 0; border: 0; border-radius: 999px;
+    background: rgba(255, 255, 255, .55); cursor: pointer;
+    transition: width .3s, background .3s;
+}
+.hero-dots button:hover { background: rgba(255, 255, 255, .85); }
+.hero-dots button.active { width: 32px; background: #fff; }
+
+/* Animasi kecil kartu setelah slide dari tombol hero (dipicu JS) */
+.outlets.pulse .outlet-card { animation: nudge .9s ease .5s 1; }
+@keyframes nudge { 50% { transform: translateY(-6px); } }
+
+@media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { transition: none !important; animation: none !important; }
 }
