@@ -30,14 +30,14 @@
             <nav id="main-nav" aria-label="Navigasi utama"
                  class="absolute inset-x-0 top-20 hidden flex-col gap-1 border-t border-black/5 bg-page px-4 pt-2 pb-5 text-base text-[#555] shadow-md
                         md:static md:flex md:flex-row md:items-center md:gap-10 md:border-0 md:bg-transparent md:p-0 md:text-[1.05rem] md:shadow-none">
-                    @php
-                        $navLinks = [
-                            ['label' => __('ui.nav_home'),            'href' => route('home'),     'active' => true],
-                            ['label' => __('ui.nav_restaurant'),      'href' => '#pilih-restoran', 'active' => false],
-                            ['label' => __('ui.nav_my_reservations'), 'href' => '#',               'active' => false],
-                        ];
-                        $locale = app()->getLocale();
-                    @endphp
+                 @php
+                    $navLinks = [
+                        ['label' => __('ui.nav_home'),            'href' => route('home'),                    'active' => request()->routeIs('home')],
+                        ['label' => __('ui.nav_restaurant'),      'href' => route('home') . '#pilih-restoran', 'active' => false],
+                        ['label' => __('ui.nav_my_reservations'), 'href' => route('guest.reservations'),      'active' => request()->routeIs('guest.*')],
+                    ];
+                    $locale = app()->getLocale();
+                @endphp
 
                 @foreach ($navLinks as $link)
                     <a href="{{ $link['href'] }}"

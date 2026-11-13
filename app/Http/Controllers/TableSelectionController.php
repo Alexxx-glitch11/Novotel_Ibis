@@ -482,6 +482,7 @@ class TableSelectionController extends Controller
         }
 
         $request->session()->put($this->confirmationKey($outlet->code), $reservation->reservation_code);
+        $request->session()->put(GuestReservationController::SESSION_KEY, mb_strtolower($reservation->customer_email));
         $request->session()->forget($flowKey);
 
         return redirect()->route('reservasi.confirmation', [
@@ -493,7 +494,7 @@ class TableSelectionController extends Controller
     public function confirmation(Request $request, string $outlet, string $code): View
     {
         $outlet = $this->findOutlet($outlet);
-        abort_unless($request->session()->get($this->confirmationKey($outlet->code)) === $code, 404);
+        abort_unless($this->canViewReservation($request, $outlet, $code), 404);
 
         $reservation = Reservation::with(['tables.area', 'items', 'latestPayment', 'qrToken'])
             ->where('outlets_id', $outlet->outlets_id)
@@ -586,6 +587,25 @@ class TableSelectionController extends Controller
 
         return redirect()->route('reservasi.confirmation', ['outlet' => $outlet->code, 'code' => $code])
             ->with('payment_submitted', true);
+    }
+
+        // Boleh membuka reservasi ini jika: (1) baru dibuat di sesi ini, atau
+    // (2) pelanggan sudah terverifikasi lewat halaman Reservasi Saya dan reservasi itu miliknya.
+    private function canViewReservation(Request $request, Outlet $outlet, string $code): bool
+    {
+        if ($request->session()->get($this->confirmationKey($outlet->code)) === $code) {
+            return true;
+        }
+
+        $email = $request->session()->get(GuestReservationController::SESSION_KEY);
+        if (! $email) {
+            return false;
+        }
+
+        return Reservation::where('outlets_id', $outlet->outlets_id)
+            ->where('reservation_code', $code)
+            ->where('customer_email', $email)
+            ->exists();
     }
 
     private function findOutlet(string $code): Outlet
