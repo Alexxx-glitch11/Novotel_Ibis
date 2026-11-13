@@ -7,13 +7,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    @vite('resources/css/app.css')
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="bg-[#f6f7fb] font-sans text-slate-900 antialiased">
     @php
         $nav = [
             'Manager' => [
-                ['Ringkasan', '#', false],
+                ['Ringkasan', route('manager.dashboard'), request()->routeIs('manager.dashboard')],
                 ['Reservasi', '#', false],
                 ['Persetujuan batal', '#', false],
                 ['Tarif & layanan', '#', false],
@@ -22,15 +22,12 @@
             ],
             'Pengelolaan outlet' => [
                 ['Meja & denah', route('manager.tables.index'), request()->routeIs('manager.tables.*')],
-                ['Menu & kategori', route('manager.menu.index'), request()->routeIs('manager.menu.*')],
+                ['Menu & kategori', route('manager.menu.index'), request()->routeIs('manager.menu.*', 'manager.menu-categories.*')],
                 ['Event & promosi', '#', false],
             ],
         ];
-        if (auth()->user()?->hasAnyRole(['finance', 'admin'])) {
-            $nav['Finance'] = [
-                ['Verifikasi pembayaran', route('finance.payments.index'), request()->routeIs('finance.payments.*')],
-            ];
-        }
+        $initials = auth()->check() ? strtoupper(mb_substr(auth()->user()->name, 0, 2)) : 'AD';
+        $today = now('Asia/Jakarta')->locale('id')->translatedFormat('l, d F Y');
     @endphp
 
     {{-- Bar atas (HP) --}}
@@ -44,7 +41,7 @@
         </button>
     </div>
 
-    <div class="md:grid md:min-h-screen md:grid-cols-[250px_1fr]">
+    <div class="md:grid md:min-h-screen md:grid-cols-[250px_minmax(0,1fr)]">
         <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col overflow-y-auto border-r border-slate-200 bg-white p-5 shadow-xl md:sticky md:top-0 md:flex md:h-screen md:w-auto md:shadow-none">
             <div class="hidden items-center gap-3 md:flex">
                 <img src="{{ asset('images/NovoLogo.png') }}" alt="Novotel" class="h-7 w-auto">
@@ -65,11 +62,24 @@
                     @endforeach
                 </nav>
             @endforeach
+
+            <div class="mt-auto border-t border-slate-200 pt-4">
+                <p class="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Outlet aktif</p>
+                <p class="mt-1 text-sm font-semibold text-slate-800">@yield('active-outlet', 'Semua outlet')</p>
+            </div>
         </aside>
 
-        <main class="min-w-0 px-4 py-6 md:px-10 md:py-9">
-            @yield('content')
-        </main>
+        <div class="min-w-0">
+            {{-- Bar atas (desktop): tanggal dan avatar --}}
+            <header class="hidden h-[70px] items-center justify-end gap-5 border-b border-slate-200 bg-white px-10 md:flex">
+                <span class="text-sm text-slate-500">{{ $today }}</span>
+                <span class="grid size-10 place-items-center rounded-full bg-[#1f1d5c] text-xs font-bold text-white" title="{{ auth()->user()->name ?? 'Admin' }}">{{ $initials }}</span>
+            </header>
+
+            <main class="px-4 py-6 md:px-10 md:py-8">
+                @yield('content')
+            </main>
+        </div>
     </div>
 
     <script>

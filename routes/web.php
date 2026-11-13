@@ -1,12 +1,15 @@
 <?php
 
+use App\Http\Controllers\Manager\DashboardController;
 use App\Http\Controllers\Manager\FloorPlanController;
 use App\Http\Controllers\Manager\MenuController;
 use App\Http\Controllers\Manager\TableController;
 use App\Http\Controllers\FinanceLoginController;
 use App\Http\Controllers\FinancePaymentController;
 use App\Http\Controllers\TableSelectionController;
+use App\Http\Controllers\GuestReservationController;
 use Illuminate\Support\Facades\Route;
+
 
 Route::view('/', 'home')->name('home');
 
@@ -19,6 +22,19 @@ Route::post('/reservasi/{outlet}/konfirmasi', [TableSelectionController::class, 
 Route::get('/reservasi/{outlet}/selesai/{code}', [TableSelectionController::class, 'confirmation'])->name('reservasi.confirmation');
 Route::get('/reservasi/{outlet}/selesai/{code}/qr', [TableSelectionController::class, 'downloadQr'])->name('reservasi.qr-download');
 Route::post('/reservasi/{outlet}/selesai/{code}/bukti-pembayaran', [TableSelectionController::class, 'uploadPaymentProof'])->name('reservasi.payment-proof');
+
+// Riwayat reservasi tanpa akun + pembatalan
+Route::prefix('reservasi-saya')->name('guest.')->group(function () {
+    Route::get('/', [GuestReservationController::class, 'index'])->name('reservations');
+    Route::post('/cari', [GuestReservationController::class, 'lookup'])->middleware('throttle:6,1')->name('lookup');
+    Route::post('/kode', [GuestReservationController::class, 'sendOtp'])->middleware('throttle:5,1')->name('otp.send');
+    Route::post('/verifikasi', [GuestReservationController::class, 'verifyOtp'])->middleware('throttle:10,1')->name('otp.verify');
+    Route::post('/keluar', [GuestReservationController::class, 'forget'])->name('forget');
+
+    Route::get('/{code}/batal', [GuestReservationController::class, 'cancelForm'])->name('cancel.create');
+    Route::post('/{code}/batal', [GuestReservationController::class, 'cancelStore'])->middleware('throttle:10,1')->name('cancel.store');
+    Route::get('/{code}/pembatalan', [GuestReservationController::class, 'cancelStatus'])->name('cancel.status');
+});
 
 Route::get('/finance/login', [FinanceLoginController::class, 'create'])->name('finance.login');
 Route::get('/login', fn () => redirect()->route('finance.login'))->name('login');
@@ -38,8 +54,11 @@ Route::get('/bahasa/{locale}', function (string $locale) {
 })->name('lang.switch');
 
 // Halaman manager.
-// TODO: setelah login siap, tambahkan ->middleware(['auth', 'role:manager|admin'])
+// TODO: setelah login manager siap, tambahkan ->middleware(['auth', 'role:manager|admin'])
 Route::prefix('manager')->name('manager.')->group(function () {
+    Route::redirect('/', '/manager/ringkasan');
+    Route::get('/ringkasan', [DashboardController::class, 'index'])->name('dashboard');
+
     Route::get('/meja', [TableController::class, 'index'])->name('tables.index');
     Route::post('/meja', [TableController::class, 'store'])->name('tables.store');
     Route::put('/meja/{table}', [TableController::class, 'update'])->name('tables.update');

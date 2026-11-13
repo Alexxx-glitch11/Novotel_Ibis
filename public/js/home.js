@@ -75,6 +75,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // duplikat slide pertama di akhir supaya putaran dari terakhir ke pertama mulus
     track.appendChild(track.children[0].cloneNode(true));
+        // Gambar slide ke-2 dst. dimuat satu per satu setelah halaman selesai dimuat
+    function loadLazySlides() {
+        const pending = Array.from(track.querySelectorAll('[data-bg]'));
+        const next = () => {
+            const el = pending.shift();
+            if (!el) return;
+            const img = new Image();
+            img.onload = img.onerror = () => {
+                el.style.backgroundImage = "url('" + el.dataset.bg + "')";
+                next();
+            };
+            img.src = el.dataset.bg;
+        };
+        next();
+    }
+    if (document.readyState === 'complete') loadLazySlides();
+    else window.addEventListener('load', loadLazySlides);
 
     const interval = parseInt(hero.dataset.interval, 10) || 5000;
     let index = 0;

@@ -30,14 +30,19 @@
         ];
     @endphp
 
+    @push('styles')
+        <link rel="preload" as="image" href="{{ asset('images/hero/' . $heroSlides[0]) }}" fetchpriority="high">
+    @endpush
+
     {{-- HERO --}}
     <section id="hero" data-interval="5000"
-             class="relative grid min-h-[380px] place-items-center overflow-hidden bg-[#8a6f55] px-5 py-12 text-center text-white sm:min-h-[460px] md:min-h-[clamp(480px,70vh,680px)] md:py-14">
+             class="relative grid min-h-[380px] place-items-center overflow-hidden bg-neutral-400 px-5 py-12 text-center text-white sm:min-h-[460px] md:min-h-[clamp(480px,70vh,680px)] md:py-14">
 
         <div class="hero-track absolute inset-0 flex will-change-transform">
             @foreach ($heroSlides as $img)
-                <div class="flex-none basis-full bg-cover bg-center"
-                     style="background-image: url('{{ asset('images/hero/' . $img) }}')"></div>
+                @php $url = asset('images/hero/' . $img); @endphp
+                <div class="flex-none basis-full bg-neutral-400 bg-cover bg-center"
+                     @if ($loop->first) style="background-image: url('{{ $url }}')" @else data-bg="{{ $url }}" @endif></div>
             @endforeach
         </div>
 
