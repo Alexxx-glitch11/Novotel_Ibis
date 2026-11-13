@@ -1,7 +1,7 @@
 @extends('layouts.manager')
 
-@section('title', 'Ringkasan operasional')
-@section('active-outlet', $selected?->name ?? 'Semua outlet')
+@section('title', __('manager.dash_title'))
+@section('active-outlet', $selected?->name ?? __('manager.all_outlets'))
 
 @section('content')
     @php
@@ -17,15 +17,15 @@
     {{-- Judul + filter outlet --}}
     <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
-            <h1 class="text-3xl font-bold tracking-tight text-[#14123f]">Ringkasan operasional</h1>
-            <p class="mt-1 text-sm text-slate-500">Pantau reservasi, keputusan, dan performa outlet.</p>
+            <h1 class="text-3xl font-bold tracking-tight text-[#14123f]">{{ __('manager.dash_title') }}</h1>
+            <p class="mt-1 text-sm text-slate-500">{{ __('manager.dash_sub') }}</p>
         </div>
         <form method="GET" action="{{ route('manager.dashboard') }}">
-            <select name="outlet" aria-label="Filter outlet" onchange="this.form.submit()"
+            <select name="outlet" aria-label="{{ __('manager.filter_outlet') }}" onchange="this.form.submit()"
                     class="cursor-pointer rounded-lg border-0 bg-transparent py-2 pr-2 text-sm font-semibold text-[#14123f] focus:ring-2 focus:ring-[#1f1d5c]/20 focus:outline-none">
-                <option value="">Semua outlet</option>
+                <option value="">{{ __('manager.all_outlets') }}</option>
                 @foreach ($outlets as $o)
-                    <option value="{{ $o->outlets_id }}" @selected($selected && $selected->outlets_id === $o->outlets_id)>{{ $o->name }}</option>
+                    <option value="{{ $o->outlets_id }}" @selected($selected && $selected->outlets_id === $o->outlets_id)>{{ $o->name }}{{ $o->is_active ? '' : ' ' . __('manager.inactive_tag') }}</option>
                 @endforeach
             </select>
         </form>
@@ -50,19 +50,18 @@
         {{-- ===== KIRI ===== --}}
         <div class="space-y-6">
 
-            {{-- Permintaan pembatalan --}}
             <section class="rounded-2xl bg-white p-5 ring-1 ring-slate-200 md:p-6">
-                <h2 class="text-lg font-bold">Permintaan pembatalan</h2>
-                <p class="text-sm text-slate-500">Tinjau alasan sebelum menyetujui atau menolak.</p>
+                <h2 class="text-lg font-bold">{{ __('manager.cancel_title') }}</h2>
+                <p class="text-sm text-slate-500">{{ __('manager.cancel_sub') }}</p>
 
                 <div class="mt-4 overflow-x-auto">
                     <table class="w-full min-w-[520px] text-left text-sm">
                         <thead>
                             <tr class="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-                                <th scope="col" class="py-2 pr-3">Tamu</th>
-                                <th scope="col" class="py-2 pr-3">Outlet / jadwal</th>
-                                <th scope="col" class="py-2 pr-3">Alasan</th>
-                                <th scope="col" class="py-2 text-right">Tindakan</th>
+                                <th scope="col" class="py-2 pr-3">{{ __('manager.col_guest') }}</th>
+                                <th scope="col" class="py-2 pr-3">{{ __('manager.col_slot') }}</th>
+                                <th scope="col" class="py-2 pr-3">{{ __('manager.col_reason') }}</th>
+                                <th scope="col" class="py-2 text-right">{{ __('manager.col_action') }}</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100">
@@ -72,28 +71,27 @@
                                     <td class="py-4 pr-3 text-slate-500">{{ $c['slot'] }}</td>
                                     <td class="py-4 pr-3 text-slate-500">{{ $c['reason'] }}</td>
                                     <td class="py-4 text-right">
-                                        <a href="#" class="inline-block rounded-lg bg-indigo-50 px-4 py-2 text-xs font-semibold text-[#1f1d5c] transition hover:bg-indigo-100">Tinjau →</a>
+                                        <a href="#" class="inline-block rounded-lg bg-indigo-50 px-4 py-2 text-xs font-semibold text-[#1f1d5c] transition hover:bg-indigo-100">{{ __('manager.review') }}</a>
                                     </td>
                                 </tr>
                             @empty
-                                <tr><td colspan="4" class="py-8 text-center text-slate-400">Tidak ada permintaan pembatalan.</td></tr>
+                                <tr><td colspan="4" class="py-8 text-center text-slate-400">{{ __('manager.no_cancel') }}</td></tr>
                             @endforelse
                         </tbody>
                     </table>
                 </div>
             </section>
 
-            {{-- Pendapatan terverifikasi --}}
             <section class="rounded-2xl bg-white p-5 ring-1 ring-slate-200 md:p-6">
                 <div class="flex items-start justify-between gap-4">
                     <div>
-                        <h2 class="text-lg font-bold">Pendapatan terverifikasi</h2>
-                        <p class="text-sm text-slate-500">Perbandingan 7 hari terakhir</p>
+                        <h2 class="text-lg font-bold">{{ __('manager.rev_title') }}</h2>
+                        <p class="text-sm text-slate-500">{{ __('manager.rev_sub') }}</p>
                     </div>
                     <p class="text-2xl font-bold text-[#14123f]">{{ $revenueTotal }}</p>
                 </div>
 
-                <div class="mt-6" role="img" aria-label="Grafik batang pendapatan terverifikasi 7 hari terakhir">
+                <div class="mt-6" role="img" aria-label="{{ __('manager.rev_aria') }}">
                     <div class="flex h-44 items-end gap-3 sm:gap-5">
                         @foreach ($revenue as $i => $r)
                             <div class="flex-1 rounded-t-lg {{ $barColors[$i % 3] }}"
@@ -113,48 +111,45 @@
         {{-- ===== KANAN ===== --}}
         <div class="space-y-6">
 
-            {{-- Tarif per outlet --}}
             <section class="rounded-2xl bg-white p-5 ring-1 ring-slate-200 md:p-6">
                 <div class="flex items-start justify-between gap-3">
-                    <h2 class="text-lg font-bold">Tarif per outlet</h2>
-                    <a href="#" class="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-[#14123f] transition hover:bg-slate-200">Ubah tarif</a>
+                    <h2 class="text-lg font-bold">{{ __('manager.rates_title') }}</h2>
+                    <a href="#" class="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-[#14123f] transition hover:bg-slate-200">{{ __('manager.edit_rates') }}</a>
                 </div>
-                <p class="mt-1 text-xs text-slate-400">Contoh tarif; nilai resmi menunggu validasi hotel.</p>
+                <p class="mt-1 text-xs text-slate-400">{{ __('manager.rates_note') }}</p>
 
                 <div class="mt-4 space-y-4">
                     @foreach ($rates as $r)
                         <div>
                             <p class="text-sm font-bold">{{ $r['outlet'] }}</p>
                             <p class="mt-1 text-sm font-semibold text-[#14123f]">
-                                Pajak {{ $r['tax'] }} <span class="ml-3">Layanan {{ $r['service'] }}</span>
+                                {{ __('manager.tax_word') }} {{ $r['tax'] }} <span class="ml-3">{{ __('manager.service_word') }} {{ $r['service'] }}</span>
                             </p>
                         </div>
                     @endforeach
                 </div>
             </section>
 
-            {{-- Aktivitas terbaru --}}
             <section class="rounded-2xl bg-white p-5 ring-1 ring-slate-200 md:p-6">
-                <h2 class="text-lg font-bold">Aktivitas terbaru</h2>
-                <p class="text-xs text-slate-400">Keputusan sensitif tercatat otomatis.</p>
+                <h2 class="text-lg font-bold">{{ __('manager.act_title') }}</h2>
+                <p class="text-xs text-slate-400">{{ __('manager.act_sub') }}</p>
 
-                 <ol class="mt-4 space-y-4">
+                <ol class="mt-4 space-y-4">
                     @forelse ($activities as $a)
                         <li class="flex gap-4 text-sm">
-                        <time class="w-14 shrink-0 text-xs text-slate-400">{{ $a['time'] }}</time>
-                        <span>{{ $a['text'] }}</span>
+                            <time class="w-14 shrink-0 text-xs text-slate-400">{{ $a['time'] }}</time>
+                            <span>{{ $a['text'] }}</span>
                         </li>
                     @empty
-                        <li class="text-sm text-slate-400">Belum ada aktivitas.</li>
+                        <li class="text-sm text-slate-400">{{ __('manager.no_activity') }}</li>
                     @endforelse
                 </ol>
             </section>
         </div>
     </div>
 
-    <p class="mt-6 text-xs text-slate-500">Laporan hanya menghitung pembayaran Paid; transaksi lama tetap memakai snapshot tarif.</p>
+    <p class="mt-6 text-xs text-slate-500">{{ __('manager.dash_footer') }}</p>
 @endsection
-
 
 @push('scripts')
 <script>

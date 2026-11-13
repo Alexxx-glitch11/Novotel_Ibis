@@ -19,7 +19,7 @@
         {{-- ===== KIRI: daftar menunggu keputusan ===== --}}
         <section class="w-full shrink-0 rounded-2xl border border-slate-200 bg-white p-4 md:w-[380px] xl:w-[420px] md:min-h-[600px] md:p-5">
             <h2 class="px-1 text-lg font-semibold text-[#1e1b4b]">Menunggu keputusan</h2>
-            <p class="px-1 text-sm text-slate-500">{{ $cancellations->count() }} permintaan â€¢ Semua outlet</p>
+            <p class="px-1 text-sm text-slate-500">{{ $cancellations->count() }} Permintaan Semua Outlet</p>
 
             <div class="mt-3">
                 @forelse ($cancellations as $item)
@@ -34,7 +34,7 @@
                        class="block rounded-xl px-4 py-4 {{ $active ? 'bg-[#e8ebfb]' : 'hover:bg-slate-50' }}">
                         <p class="text-base font-semibold text-[#1e1b4b]">{{ $r?->customer_name }}</p>
                         <p class="mt-1 text-sm text-slate-500">
-                            {{ $r?->outlet?->name }} â€¢ {{ str_replace(':', '.', substr($r?->start_time ?? '', 0, 5)) }}
+                            {{ $r?->outlet?->name }}  {{ str_replace(':', '.', substr($r?->start_time ?? '', 0, 5)) }}
                         </p>
                         <div class="mt-2.5 flex items-center gap-3">
                             <span class="rounded-full bg-[#fdebc8] px-4 py-1 text-xs font-medium text-[#8a5a00]">Menunggu</span>
@@ -62,9 +62,9 @@
                     $rows = [
                         'Tamu' => $r?->customer_name,
                         'Kode reservasi' => $r?->reservation_code,
-                        'Outlet & meja' => $r?->outlet?->name . ' â€¢ ' . $tables->pluck('table_code')->join(', ') . ' ' . ($tables->first()?->area?->name ?? ''),
-                        'Jadwal' => $r?->reservation_date?->locale('id')->translatedFormat('l, d M Y') . ' â€¢ ' . str_replace(':', '.', substr($r?->start_time ?? '', 0, 5)),
-                        'Pembayaran' => ucfirst($pay?->payment_status ?? 'belum ada') . ' â€¢ Rp' . number_format($r?->grand_total ?? 0, 0, ',', '.'),
+                        'Outlet & meja' => $r?->outlet?->name . '  ' . $tables->pluck('table_code')->join(', ') . ' ' . ($tables->first()?->area?->name ?? ''),
+                        'Jadwal' => $r?->reservation_date?->locale('id')->translatedFormat('l, d M Y') . '  ' . str_replace(':', '.', substr($r?->start_time ?? '', 0, 5)),
+                        'Pembayaran' => ucfirst($pay?->payment_status ?? 'belum ada') . '  Rp' . number_format($r?->grand_total ?? 0, 0, ',', '.'),
                     ];
                 @endphp
 

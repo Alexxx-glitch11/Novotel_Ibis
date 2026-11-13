@@ -318,10 +318,17 @@ class TableSelectionController extends Controller
                 ->withErrors(['reservation' => __('ui.hold_expired')]);
         }
 
-        $validated = $request->validate([
+                $validated = $request->validate([
             'payment_proof' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:5120'],
+            'notes' => ['nullable', 'string', 'max:1000'],
         ]);
         $proofFile = $validated['payment_proof'];
+
+        // Catatan dari halaman review dipakai; bila kolomnya tidak terkirim, pakai catatan dari langkah pertama.
+        $notes = array_key_exists('notes', $validated)
+            ? trim((string) $validated['notes'])
+            : trim((string) ($flow['notes'] ?? ''));
+        $notes = $notes === '' ? null : $notes;
         $storedProofPath = null;
 
         $sessionHash = $this->sessionHash($request);
@@ -343,7 +350,7 @@ class TableSelectionController extends Controller
         }
 
         try {
-            $reservation = DB::transaction(function () use ($flow, $outlet, $sessionHash, $requestedItems, $proofFile, &$storedProofPath): ?Reservation {
+                        $reservation = DB::transaction(function () use ($flow, $outlet, $sessionHash, $requestedItems, $proofFile, $notes, &$storedProofPath): ?Reservation {
             $hold = ReservationHold::where('reservation_holds_id', $flow['hold_id'])
                 ->where('outlets_id', $outlet->outlets_id)
                 ->where('session_token_hash', $sessionHash)
@@ -406,7 +413,7 @@ class TableSelectionController extends Controller
                 'tax_rate_percent' => $taxRate,
                 'tax_amount' => $taxAmount,
                 'grand_total' => $subtotal + $serviceAmount + $taxAmount,
-                'notes' => $flow['notes'] ?? null,
+                'notes' => $notes,
             ]);
             $reservationStart = Carbon::parse($reservation->reservation_date->toDateString() . ' ' . $reservation->start_time, config('reservation.timezone'));
             ReservationQrToken::create([
@@ -610,7 +617,14 @@ class TableSelectionController extends Controller
 
     private function findOutlet(string $code): Outlet
     {
-        return Outlet::where('code', $code)->where('is_active', true)->firstOrFail();
+        $query = Outlet::where('code', $code);
+
+        // Outlet nonaktif menutup reservasi baru, tetapi reservasi yang sudah ada tetap dapat dibuka.
+        if (! request()->routeIs('reservasi.confirmation', 'reservasi.qr-download', 'reservasi.payment-proof')) {
+            $query->where('is_active', true);
+        }
+
+        return $query->firstOrFail();
     }
 
     private function flowKey(string $outletCode): string

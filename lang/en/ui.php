@@ -15,6 +15,12 @@ return [
 
     'outlets_title'   => 'Choose Your Restaurant',
     'outlets_sub'     => 'Two hotels, two outstanding dining experiences, in one comfortable setting.',
+    'public_events_title' => 'Events and promotions',
+    'public_events_sub' => 'Explore the latest events and offers from our restaurants.',
+    'public_events_image' => 'EVENT IMAGE',
+    'public_content_promotion' => 'Promotion',
+    'public_content_event' => 'Event',
+    'outlet_closed'   => 'Currently unavailable',
     'novotel_desc'    => 'The perfect choice for business dinners, family meals, or special occasions with international & local dishes.',
     'novotel_btn'     => 'Choose Novotel',
     'ibis_desc'       => 'A relaxed atmosphere with delicious menus for everyone. Ideal for unwinding any time of the day.',

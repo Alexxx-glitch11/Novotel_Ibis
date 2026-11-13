@@ -19,6 +19,11 @@
     $bankName = config('reservation.bank.name');
     $bankNumber = config('reservation.bank.account_number');
     $bankHolder = config('reservation.bank.account_holder');
+    $jsText = [
+    'sending' => __('confirm.sending'),
+    'copy'    => __('confirm.copy_account'),
+    'copied'  => __('confirm.account_copied'),
+    ];
 @endphp
 <div class="mx-auto w-full max-w-6xl px-4 py-8 md:py-12">
     @if ($errors->any())
@@ -72,30 +77,33 @@
             </section>
 
             <section class="mt-6">
-                <h2 class="text-sm font-bold text-slate-900">Catatan khusus</h2>
-                <div class="mt-2 min-h-16 rounded-xl bg-slate-50 px-4 py-4 text-sm text-slate-500 ring-1 ring-slate-200">{{ $flow['notes'] ?: 'Tidak ada catatan khusus.' }}</div>
+                <label for="notes" class="text-sm font-bold text-slate-900">{{ __('confirm.notes_title') }} <span class="font-normal text-slate-500">({{ __('confirm.optional') }})</span></label>
+                <textarea id="notes" name="notes" form="reservation-confirm-form" rows="3" maxlength="1000"
+                          placeholder="{{ __('confirm.notes_ph') }}"
+                          class="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-[#24215f] focus:ring-2 focus:ring-[#24215f]/20 focus:outline-none">{{ old('notes', $flow['notes'] ?? '') }}</textarea>
+                @error('notes')<p class="mt-2 text-sm text-red-700">{{ $message }}</p>@enderror
             </section>
 
             <section class="mt-7 rounded-xl border border-slate-200 p-5 md:p-6">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                        <h2 class="font-bold text-[#24215f]">Rekening resmi pembayaran hotel</h2>
+                        <h2 class="font-bold text-[#24215f]">{{ __('confirm.bank_title') }}</h2>
                         @if ($bankName && $bankNumber && $bankHolder)
-                            <p class="mt-2 text-sm text-slate-700">{{ $bankName }} <span class="px-1 text-slate-300">·</span> <span class="font-mono font-medium">{{ $bankNumber }}</span> <span class="px-1 text-slate-300">·</span> a.n. {{ $bankHolder }}</p>
+                            <p class="mt-2 text-sm text-slate-700">{{ $bankName }} <span class="px-1 text-slate-300">·</span> <span class="font-mono font-medium">{{ $bankNumber }}</span> <span class="px-1 text-slate-300">·</span> {{ __('confirm.bank_holder', ['name' => $bankHolder]) }}</p>
                         @else
-                            <p class="mt-2 text-sm text-amber-800">Rekening hotel belum dikonfigurasi. Jangan transfer sebelum mendapatkan nomor rekening resmi.</p>
+                            <p class="mt-2 text-sm text-amber-800">{{ __('confirm.bank_missing_review') }}</p>
                         @endif
                     </div>
                     @if ($bankNumber)
-                        <button type="button" id="copy-bank" data-account="{{ $bankNumber }}" class="rounded-lg bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-[#24215f] hover:bg-indigo-100">Salin rekening</button>
+                        <button type="button" id="copy-bank" data-account="{{ $bankNumber }}" class="rounded-lg bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-[#24215f] hover:bg-indigo-100">{{ __('confirm.copy_account') }}</button>
                     @endif
                 </div>
 
                 <label for="payment-proof" id="proof-dropzone" class="mt-6 flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-[#fbfcfe] px-5 py-8 text-center transition hover:border-[#24215f] hover:bg-indigo-50/30">
                     <svg class="size-12 text-black" viewBox="0 0 48 48" fill="currentColor" aria-hidden="true"><path d="M13 38a9 9 0 0 1-1-18 13 13 0 0 1 25-3 10.5 10.5 0 0 1-1.5 21H27V25.4l3.3 3.3 2.1-2.1L24 18.2l-8.4 8.4 2.1 2.1 3.3-3.3V38h-8Z"/></svg>
-                    <span class="mt-3 font-semibold text-slate-800">Unggah bukti pembayaran</span>
-                    <span class="mt-2 text-sm text-slate-500">Struk ATM, screenshot mobile banking, atau resi transfer</span>
-                    <span class="mt-2 text-xs text-slate-400">JPG, PNG, WebP, atau PDF · maks. 5 MB. Bukti akan dikirim ke finance untuk diverifikasi.</span>
+                    <span class="mt-3 font-semibold text-slate-800">{{ __('confirm.upload_title') }}</span>
+                    <span class="mt-2 text-sm text-slate-500">{{ __('confirm.upload_hint') }}</span>
+                    <span class="mt-2 text-xs text-slate-400">{{ __('confirm.upload_limits') }}</span>
                     <span id="proof-file-name" class="mt-3 hidden max-w-full truncate rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-[#24215f]"></span>
                     <input id="payment-proof" name="payment_proof" type="file" form="reservation-confirm-form" accept="image/jpeg,image/png,image/webp,application/pdf" required class="sr-only">
                 </label>
@@ -105,13 +113,13 @@
             <form id="reservation-confirm-form" method="POST" action="{{ route('reservasi.confirm', $outlet->code) }}" enctype="multipart/form-data" class="mt-6">
                 @csrf
                 <div class="grid gap-4 border-t border-slate-400 py-4 md:grid-cols-[.8fr_1.2fr] md:items-center">
-                    <div><p class="text-xs text-slate-500">Total pembayaran</p><p class="mt-1 text-2xl font-bold text-slate-800">{{ $money($grandTotal) }}</p></div>
+                    <div><p class="text-xs text-slate-500">{{ __('confirm.total_label') }}</p><p class="mt-1 text-2xl font-bold text-slate-800">{{ $money($grandTotal) }}</p></div>
                     <div>
                         <button id="confirm-reservation" disabled class="flex min-h-14 w-full items-center justify-center gap-3 rounded-xl bg-[#24215f] px-6 py-4 text-sm font-semibold text-white transition hover:bg-[#181644] disabled:cursor-not-allowed disabled:opacity-50">
                             <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></svg>
-                            Kirim Bukti Pembayaran
+                            {{ __('confirm.btn_submit') }}
                         </button>
-                        <p class="mt-2 text-right text-xs text-slate-500">Waktu penahanan meja tersisa <strong id="hold-countdown" data-expires="{{ $hold->expires_at->timestamp }}" class="tabular-nums">--:--</strong></p>
+                        <p class="mt-2 text-right text-xs text-slate-500">{{ __('confirm.hold_label') }} <strong id="hold-countdown" data-expires="{{ $hold->expires_at->timestamp }}" class="tabular-nums">--:--</strong></p>
                     </div>
                 </div>
             </form>
@@ -123,6 +131,7 @@
 @push('scripts')
 <script>
 (() => {
+    const T = @json($jsText);
     const proofInput = document.getElementById('payment-proof');
     const proofName = document.getElementById('proof-file-name');
     const dropzone = document.getElementById('proof-dropzone');
@@ -154,11 +163,11 @@
         }
     });
     document.getElementById('copy-bank')?.addEventListener('click', async event => {
-        const button = event.currentTarget;
-        try { await navigator.clipboard.writeText(button.dataset.account); button.textContent = 'Rekening tersalin'; setTimeout(() => button.textContent = 'Salin rekening', 1800); }
-        catch { button.textContent = button.dataset.account; }
+        const copyBtn = event.currentTarget;
+        try { await navigator.clipboard.writeText(copyBtn.dataset.account); copyBtn.textContent = T.copied; setTimeout(() => copyBtn.textContent = T.copy, 1800); }
+        catch { copyBtn.textContent = copyBtn.dataset.account; }
     });
-    form.addEventListener('submit', () => { button.disabled = true; button.textContent = 'Mengirim bukti...'; });
+    form.addEventListener('submit', () => { button.disabled = true; button.textContent = T.sending; });
     const update = () => {
         const seconds = Math.max(0, Math.floor((deadline - Date.now()) / 1000));
         countdown.textContent = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;

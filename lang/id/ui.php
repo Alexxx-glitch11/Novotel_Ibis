@@ -15,6 +15,12 @@ return [
 
     'outlets_title'   => 'Pilih Restoran Anda',
     'outlets_sub'     => 'Dua hotel, dua pengalaman kuliner yang luar biasa, dalam satu lingkungan yang nyaman.',
+    'public_events_title' => 'Event dan promosi',
+    'public_events_sub' => 'Lihat acara dan penawaran terbaru dari restoran kami.',
+    'public_events_image' => 'GAMBAR EVENT',
+    'public_content_promotion' => 'Promosi',
+    'public_content_event' => 'Acara',
+    'outlet_closed'   => 'Sedang tidak tersedia',
     'novotel_desc'    => 'Pilihan sempurna untuk makan malam bisnis, keluarga, atau momen spesial dengan hidangan internasional & lokal.',
     'novotel_btn'     => 'Pilih Novotel',
     'ibis_desc'       => 'Suasana santai dengan menu lezat yang cocok untuk semua kalangan. Cocok untuk bersantai sepanjang hari.',

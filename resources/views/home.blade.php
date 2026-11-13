@@ -67,6 +67,7 @@
     </section>
 
     {{-- PILIH OUTLET --}}
+        {{-- PILIH OUTLET --}}
     <section id="pilih-restoran" class="outlets pt-14 pb-16 text-center md:min-h-[calc(100vh-5rem)] md:pt-[5.5rem] md:pb-28">
         <div class="mx-auto w-full max-w-7xl px-4">
             <h2 class="mb-3 text-[1.75rem] font-semibold sm:text-3xl md:mb-5 md:text-5xl">{{ __('ui.outlets_title') }}</h2>
@@ -76,21 +77,28 @@
 
             <div class="mx-auto grid w-full max-w-[1200px] gap-5 md:grid-cols-[1fr_1px_1fr] md:gap-16">
                 @foreach ($outlets as $o)
-                    <a href="{{ route('reservasi.outlet', $o['slug']) }}"
-                       style="--card-img: url('{{ asset($o['img']) }}')"
-                       class="outlet-card group relative isolate block min-h-[230px] overflow-hidden rounded-2xl bg-neutral-700 text-left text-white transition duration-300 hover:-translate-y-2 focus-visible:-translate-y-2 focus-visible:outline-none sm:min-h-[280px] md:min-h-[360px] md:rounded-[22px]
-                              before:absolute before:inset-0 before:-z-10 before:transition-opacity before:duration-300 hover:before:opacity-90 focus-visible:before:opacity-90
-                              after:absolute after:inset-0 after:-z-20 after:bg-[image:var(--card-img)] after:bg-cover after:bg-center after:transition-transform after:duration-700 hover:after:scale-110 focus-visible:after:scale-110
-                              {{ $o['card'] }}">
+                    @php
+                        $open = (bool) $outletOpen->get($o['slug'], false);
+                        $tag  = $open ? 'a' : 'div';
+                    @endphp
+
+                    <{{ $tag }}
+                        @if ($open) href="{{ route('reservasi.outlet', $o['slug']) }}" @else aria-disabled="true" @endif
+                        style="--card-img: url('{{ asset($o['img']) }}')"
+                        class="outlet-card group relative isolate block min-h-[230px] overflow-hidden rounded-2xl bg-neutral-700 text-left text-white transition duration-300 hover:-translate-y-2 focus-visible:-translate-y-2 focus-visible:outline-none sm:min-h-[280px] md:min-h-[360px] md:rounded-[22px]
+                               before:absolute before:inset-0 before:-z-10 before:transition-opacity before:duration-300 hover:before:opacity-90 focus-visible:before:opacity-90
+                               after:absolute after:inset-0 after:-z-20 after:bg-[image:var(--card-img)] after:bg-cover after:bg-center after:transition-transform after:duration-700 hover:after:scale-110 focus-visible:after:scale-110
+                               {{ $o['card'] }} {{ $open ? '' : 'pointer-events-none grayscale opacity-70' }}">
                         <div class="flex h-full flex-col p-5 sm:p-7 md:p-9">
                             <h3 class="text-3xl leading-[1.1] font-medium tracking-[.06em] sm:text-4xl md:text-5xl">{{ $o['name'] }}</h3>
                             <span class="mb-3 block text-lg font-light md:mb-5 md:text-2xl">{{ $o['sub'] }}</span>
                             <p class="mb-5 max-w-[92%] text-sm leading-relaxed md:mb-6 md:text-base">{{ $o['desc'] }}</p>
                             <span class="mt-auto inline-flex gap-3 self-start rounded-md bg-white px-4 py-2 text-base transition-all duration-200 group-hover:gap-5 group-focus-visible:gap-5 md:px-5 md:py-2.5 md:text-xl {{ $o['btnc'] }}">
-                                {{ $o['btn'] }} <i class="not-italic">&gt;</i>
+                                {{ $open ? $o['btn'] : __('ui.outlet_closed') }}
+                                @if ($open)<i class="not-italic">&gt;</i>@endif
                             </span>
                         </div>
-                    </a>
+                    </{{ $tag }}>
 
                     @if (! $loop->last)
                         {{-- garis pemisah hanya di desktop --}}
@@ -100,4 +108,37 @@
             </div>
         </div>
     </section>
+
+    @if (($activeContents ?? collect())->isNotEmpty())
+        <section class="border-t border-slate-200 bg-white py-14 md:py-20">
+            <div class="mx-auto max-w-7xl px-4">
+                <div class="mb-8 text-center md:mb-10">
+                    <h2 class="text-2xl font-semibold text-slate-900 md:text-4xl">{{ __('ui.public_events_title') }}</h2>
+                    <p class="mx-auto mt-2 max-w-2xl text-sm text-slate-500 md:text-base">{{ __('ui.public_events_sub') }}</p>
+                </div>
+                <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                    @foreach ($activeContents as $content)
+                        <article class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                            @if ($content->image_path)
+                                <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($content->image_path) }}" alt="{{ $content->title }}" class="h-48 w-full object-cover">
+                            @else
+                                <div class="grid h-48 place-items-center bg-indigo-50 text-xs font-semibold tracking-wide text-indigo-900">{{ __('ui.public_events_image') }}</div>
+                            @endif
+                            <div class="p-5">
+                                <p class="text-xs font-semibold text-indigo-800">{{ __('ui.public_content_' . $content->content_type) }} · {{ $content->outlet?->name }}</p>
+                                <h3 class="mt-2 text-lg font-semibold text-slate-900">{{ $content->title }}</h3>
+                                <p class="mt-2 text-sm leading-relaxed text-slate-600">{{ $content->description }}</p>
+                                @if ($content->starts_on || $content->ends_on)
+                                    <p class="mt-4 text-xs text-slate-400">
+                                        {{ $content->starts_on?->locale(app()->getLocale())->translatedFormat('d F Y') ?? '' }}
+                                        @if ($content->ends_on)–{{ $content->ends_on->locale(app()->getLocale())->translatedFormat('d F Y') }}@endif
+                                    </p>
+                                @endif
+                            </div>
+                        </article>
+                    @endforeach
+                </div>
+            </div>
+        </section>
+    @endif
 @endsection

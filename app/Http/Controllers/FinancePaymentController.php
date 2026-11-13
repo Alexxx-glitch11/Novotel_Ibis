@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AuditLog;
 use App\Models\Payment;
 use App\Models\ReservationQrToken;
 use App\Services\ReservationAvailability;
@@ -77,6 +78,24 @@ class FinancePaymentController extends Controller
                     'is_active' => true,
                 ]);
             }
+
+            AuditLog::create([
+                'users_id' => $request->user()?->users_id,
+                'action' => 'payment_verified',
+                'entity_type' => 'payment',
+                'entity_id' => $locked->payments_id,
+                'old_values' => [
+                    'payment_status' => 'pending_verification',
+                    'reservation_status' => 'pending_payment',
+                ],
+                'new_values' => [
+                    'reservation_code' => $reservation->reservation_code,
+                    'payment_status' => 'paid',
+                    'reservation_status' => 'confirmed',
+                ],
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
         });
 
         return back()->with('success', 'Pembayaran diterima dan reservasi dikonfirmasi.');
@@ -93,6 +112,21 @@ class FinancePaymentController extends Controller
                 'users_id_verified_by' => $request->user()->getAuthIdentifier(),
                 'verified_at' => now(),
                 'rejection_reason' => $data['rejection_reason'],
+            ]);
+
+            AuditLog::create([
+                'users_id' => $request->user()?->users_id,
+                'action' => 'payment_rejected',
+                'entity_type' => 'payment',
+                'entity_id' => $locked->payments_id,
+                'old_values' => ['payment_status' => 'pending_verification'],
+                'new_values' => [
+                    'reservation_code' => $locked->reservation?->reservation_code,
+                    'payment_status' => 'rejected',
+                    'rejection_reason' => $data['rejection_reason'],
+                ],
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
             ]);
         });
 

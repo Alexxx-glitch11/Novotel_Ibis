@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Manager;
 
 use App\Http\Controllers\Controller;
-use App\Models\AuditLog;
 use App\Models\Outlet;
 use App\Models\Table;
 use Illuminate\Http\RedirectResponse;
@@ -14,13 +13,14 @@ class TableController extends Controller
 {
     public function index(Request $request)
     {
-        $outlets = Outlet::where('is_active', true)->orderBy('name')->get();
-        $outlet = $outlets->firstWhere('outlets_id', (int) $request->query('outlet')) ?? $outlets->first();
+        // Semua outlet (termasuk yang nonaktif), Novotel paling atas.
+        $outlets = Outlet::ordered()->get();
+        $outlet  = $outlets->firstWhere('outlets_id', (int) $request->query('outlet')) ?? $outlets->first();
 
-        abort_if(! $outlet, 404, 'Belum ada outlet.');
+        abort_if(! $outlet, 404, __('manager.no_outlet'));
 
         $areas = $outlet->areas()->orderBy('name')->get();
-        $area = $areas->firstWhere('areas_id', (int) $request->query('area')) ?? $areas->first();
+        $area  = $areas->firstWhere('areas_id', (int) $request->query('area')) ?? $areas->first();
 
         $tables = $area ? $area->tables()->orderBy('table_code')->get() : collect();
 
@@ -30,35 +30,25 @@ class TableController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $table = Table::create($this->validated($request));
-        $this->audit($request, $table, 'table_created', null, $table->only([
-            'outlets_id', 'areas_id', 'table_code', 'capacity', 'min_capacity', 'position_x', 'position_y', 'is_active',
-        ]));
 
-        return $this->backTo($table, 'Meja berhasil ditambahkan.');
+        return $this->backTo($table, __('manager.tbl_added'));
     }
 
     public function update(Request $request, Table $table): RedirectResponse
     {
-        $oldValues = $table->only([
-            'outlets_id', 'areas_id', 'table_code', 'capacity', 'min_capacity', 'position_x', 'position_y', 'is_active',
-        ]);
         $table->update($this->validated($request, $table));
-        $this->audit($request, $table, 'table_updated', $oldValues, $table->only(array_keys($oldValues)));
 
-        return $this->backTo($table, 'Meja berhasil diperbarui.');
+        return $this->backTo($table, __('manager.tbl_updated'));
     }
 
-    public function destroy(Request $request, Table $table): RedirectResponse
+    public function destroy(Table $table): RedirectResponse
     {
         // Meja yang sudah punya riwayat reservasi tidak boleh dihapus (jejak data)
         if ($table->reservations()->exists() || $table->reservationHolds()->exists()) {
-            return $this->backTo($table, null, 'Meja ini sudah punya riwayat reservasi, jadi tidak bisa dihapus. Nonaktifkan saja lewat tombol Ubah.');
+            return $this->backTo($table, null, __('manager.tbl_has_history'));
         }
 
-        $redirect = $this->backTo($table, 'Meja berhasil dihapus.');
-        $this->audit($request, $table, 'table_deleted', $table->only([
-            'outlets_id', 'areas_id', 'table_code', 'capacity', 'min_capacity', 'position_x', 'position_y', 'is_active',
-        ]), null);
+        $redirect = $this->backTo($table, __('manager.tbl_deleted'));
         $table->delete();
 
         return $redirect;
@@ -80,9 +70,9 @@ class TableController extends Controller
             'position_x'   => ['required', 'numeric', 'between:0,100'],
             'position_y'   => ['required', 'numeric', 'between:0,100'],
         ], [
-            'table_code.unique' => 'Kode meja sudah dipakai di outlet ini.',
-            'min_capacity.lte'  => 'Kapasitas minimal tidak boleh lebih besar dari kapasitas.',
-            'areas_id.exists'   => 'Area tidak sesuai dengan outlet.',
+            'table_code.unique' => __('manager.v_code_unique'),
+            'min_capacity.lte'  => __('manager.v_min_lte'),
+            'areas_id.exists'   => __('manager.v_area_exists'),
         ]);
 
         $data['is_active'] = $request->boolean('is_active');
@@ -98,19 +88,5 @@ class TableController extends Controller
         ]);
 
         return $success ? $redirect->with('success', $success) : $redirect->with('error', $error);
-    }
-
-    private function audit(Request $request, Table $table, string $action, ?array $oldValues, ?array $newValues): void
-    {
-        AuditLog::create([
-            'users_id' => $request->user()?->users_id,
-            'action' => $action,
-            'entity_type' => 'table',
-            'entity_id' => $table->tables_id,
-            'old_values' => $oldValues,
-            'new_values' => $newValues,
-            'ip_address' => $request->ip(),
-            'user_agent' => $request->userAgent(),
-        ]);
     }
 }

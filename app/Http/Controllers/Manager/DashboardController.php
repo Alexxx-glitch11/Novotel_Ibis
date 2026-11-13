@@ -12,6 +12,7 @@ use App\Models\TaxServiceRate;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\Str;
 
 class DashboardController extends Controller
@@ -21,7 +22,8 @@ class DashboardController extends Controller
 
     public function index(Request $request)
     {
-        $outlets  = Outlet::where('is_active', true)->orderBy('name')->get();
+        // Semua outlet (termasuk yang nonaktif), Novotel paling atas.
+        $outlets  = Outlet::ordered()->get();
         $selected = $outlets->firstWhere('outlets_id', (int) $request->query('outlet')); // null = semua outlet
 
         $revenue = $this->revenue($selected);
@@ -54,24 +56,24 @@ class DashboardController extends Controller
 
         return [
             [
-                'letter' => 'R', 'tone' => 'blue', 'label' => 'Reservasi hari ini',
+                'letter' => 'R', 'tone' => 'blue', 'label' => __('manager.stat_res_label'),
                 'value'  => (string) ($confirmed + $waiting),
-                'note'   => "$confirmed terkonfirmasi • $waiting menunggu",
+                'note'   => __('manager.stat_res_note', ['confirmed' => $confirmed, 'waiting' => $waiting]),
             ],
             [
-                'letter' => 'P', 'tone' => 'amber', 'label' => 'Pembatalan menunggu',
+                'letter' => 'P', 'tone' => 'amber', 'label' => __('manager.stat_cancel_label'),
                 'value'  => (string) $pendingCancel,
-                'note'   => $pendingCancel ? 'Perlu keputusan Manager' : 'Tidak ada yang menunggu',
+                'note'   => $pendingCancel ? __('manager.stat_cancel_note') : __('manager.stat_cancel_none'),
             ],
             [
-                'letter' => 'P', 'tone' => 'green', 'label' => 'Pendapatan terverifikasi',
+                'letter' => 'P', 'tone' => 'green', 'label' => __('manager.stat_paid_label'),
                 'value'  => $this->rupiahShort($revenue['total']),
-                'note'   => 'Dari ' . $revenue['count'] . ' pembayaran • 7 hari',
+                'note'   => trans_choice('manager.stat_paid_note', $revenue['count'], ['count' => $revenue['count']]),
             ],
             [
-                'letter' => 'T', 'tone' => 'blue', 'label' => 'Tamu dijadwalkan',
+                'letter' => 'T', 'tone' => 'blue', 'label' => __('manager.stat_guests_label'),
                 'value'  => (string) $guests,
-                'note'   => $outlet ? 'Untuk ' . $outlet->name : 'Untuk seluruh outlet',
+                'note'   => $outlet ? __('manager.stat_guests_outlet', ['outlet' => $outlet->name]) : __('manager.stat_guests_all'),
             ],
         ];
     }
@@ -88,21 +90,24 @@ class DashboardController extends Controller
 
     private function cancellations(?Outlet $outlet): array
     {
+        $loc = app()->getLocale();
+
         return $this->pendingCancellations($outlet)
             ->with('reservation.outlet')
             ->oldest('created_at')
             ->limit(5)
             ->get()
-            ->map(function (CancellationRequest $c) {
+            ->map(function (CancellationRequest $c) use ($loc) {
                 $r    = $c->reservation;
                 $time = str_replace(':', '.', substr((string) $r->start_time, 0, 5));
                 $date = $r->reservation_date->isToday()
                     ? ''
-                    : $r->reservation_date->locale('id')->translatedFormat('d M') . ', ';
+                    : $r->reservation_date->copy()->locale($loc)->translatedFormat('d M') . ', ';
 
                 return [
                     'guest'  => $r->customer_name,
                     'slot'   => $r->outlet->name . ' • ' . $date . $time,
+                    // Alasan disimpan dalam bahasa Indonesia (dibaca Manager), jadi ditampilkan apa adanya.
                     'reason' => Str::limit($c->reason, 40),
                 ];
             })
@@ -113,6 +118,7 @@ class DashboardController extends Controller
     private function revenue(?Outlet $outlet): array
     {
         $from = now()->subDays(6)->startOfDay();
+        $loc  = app()->getLocale();
 
         $paid = fn () => Payment::query()
             ->where('payment_status', 'paid')
@@ -136,7 +142,7 @@ class DashboardController extends Controller
             $total += $value;
 
             $bars[] = [
-                'day'   => $date->locale('id')->translatedFormat('D'),
+                'day'   => $date->copy()->locale($loc)->translatedFormat('D'),
                 'value' => $value,
                 'label' => $this->rupiahShort($value),
             ];
@@ -145,7 +151,7 @@ class DashboardController extends Controller
         return ['bars' => $bars, 'total' => $total, 'count' => $paid()->count()];
     }
 
-    // Tarif yang masih berlaku hari ini, per outlet
+    // Tarif yang masih berlaku hari ini, per outlet (Novotel paling atas)
     private function rates(?Outlet $selected, $outlets): array
     {
         $today = now()->toDateString();
@@ -173,47 +179,28 @@ class DashboardController extends Controller
     // Aktivitas terbaru dari audit_logs (tabel ini tidak punya kolom outlet, jadi tidak ikut filter)
     private function activities(): array
     {
-        $entities = [
-            'payment'              => 'Pembayaran',
-            'reservation'          => 'Reservasi',
-            'cancellation_request' => 'Pembatalan',
-            'tax_service_rate'     => 'Tarif',
-            'table'                => 'Meja',
-            'area'                 => 'Denah',
-            'menu_item'            => 'Menu',
-            'menu_category'        => 'Kategori menu',
-        ];
-
-        $verbs = [
-            'created'   => 'dibuat',
-            'updated'   => 'diperbarui',
-            'deleted'   => 'dihapus',
-            'approved'  => 'disetujui',
-            'rejected'  => 'ditolak',
-            'confirmed' => 'dikonfirmasi',
-            'cancelled' => 'dibatalkan',
-            'uploaded'  => 'diunggah',
-            'verified'  => 'diverifikasi',
-            'expired'   => 'kedaluwarsa',
-            'requested' => 'diajukan',
-        ];
+        $loc = app()->getLocale();
 
         return AuditLog::query()
             ->orderByDesc('created_at')
             ->orderByDesc('audit_logs_id')
             ->limit(5)
             ->get()
-            ->map(function (AuditLog $log) use ($entities, $verbs) {
-                $at      = Carbon::parse($log->created_at);
-                $type    = Str::singular(Str::snake(class_basename((string) $log->entity_type)));
-                $entity  = $entities[$type] ?? Str::headline($type);
-                $action  = strtolower((string) $log->action);
-                $verbKey = Str::afterLast($action, '_');   // reservation_created -> created
-                $verb    = $verbs[$verbKey] ?? str_replace('_', ' ', $action);
+            ->map(function (AuditLog $log) use ($loc) {
+                $at     = Carbon::parse($log->created_at);
+                $type   = Str::singular(Str::snake(class_basename((string) $log->entity_type)));
+                $action = strtolower((string) $log->action);
+                $verb   = Str::afterLast($action, '_');   // reservation_created -> created
+
+                $entityKey = 'manager.ent_' . $type;
+                $verbKey   = 'manager.verb_' . $verb;
+
+                $entity = Lang::has($entityKey) ? __($entityKey) : Str::headline($type);
+                $verbT  = Lang::has($verbKey) ? __($verbKey) : str_replace('_', ' ', $action);
 
                 return [
-                    'time' => $at->isToday() ? $at->format('H.i') : $at->locale('id')->translatedFormat('d M'),
-                    'text' => "$entity $verb",
+                    'time' => $at->isToday() ? $at->format('H.i') : $at->copy()->locale($loc)->translatedFormat('d M'),
+                    'text' => $entity . ' ' . $verbT,
                 ];
             })
             ->all();
@@ -221,14 +208,16 @@ class DashboardController extends Controller
 
     private function rupiahShort(float $n): string
     {
+        [$dec, $thou] = app()->getLocale() === 'en' ? ['.', ','] : [',', '.'];
+
         if ($n >= 1_000_000_000) {
-            return 'Rp' . number_format($n / 1_000_000_000, 1, ',', '.') . ' M';
+            return 'Rp' . number_format($n / 1_000_000_000, 1, $dec, $thou) . ' ' . __('manager.unit_billion');
         }
         if ($n >= 1_000_000) {
-            return 'Rp' . number_format($n / 1_000_000, 1, ',', '.') . ' jt';
+            return 'Rp' . number_format($n / 1_000_000, 1, $dec, $thou) . ' ' . __('manager.unit_million');
         }
 
-        return 'Rp' . number_format($n, 0, ',', '.');
+        return 'Rp' . number_format($n, 0, $dec, $thou);
     }
 
     private function percent($value): string
