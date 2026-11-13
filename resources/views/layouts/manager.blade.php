@@ -15,9 +15,9 @@
             'Manager' => [
                 ['Ringkasan', '#', false],
                 ['Reservasi', '#', false],
-                ['Persetujuan batal', '#', false],
-                ['Tarif & layanan', '#', false],
-                ['Laporan', '#', false],
+                ['Persetujuan batal', route('manager.cancellations.index'), request()->routeIs('manager.cancellations.*')],
+                ['Tarif & layanan', route('manager.tax-service.index'), request()->routeIs('manager.tax-service.*')],
+                ['Laporan', route('manager.reports.index'), request()->routeIs('manager.reports.*')],
                 ['Riwayat aktivitas', '#', false],
             ],
             'Pengelolaan outlet' => [
@@ -57,17 +57,31 @@
                 <nav class="mt-2 flex flex-col gap-1">
                     @foreach ($items as [$label, $href, $active])
                         <a href="{{ $href }}"
-                           class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors
-                                  {{ $active ? 'bg-indigo-50 font-semibold text-[#1f1d5c]' : 'text-slate-600 hover:bg-slate-50' }}">
-                            <span class="size-2 shrink-0 rounded-full {{ $active ? 'bg-[#1f1d5c]' : 'border border-slate-400' }}"></span>
+                           class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors
+                                  {{ $active ? 'bg-[#eceffc] font-semibold text-[#14123f]' : 'text-slate-600 hover:bg-slate-50' }}">
+                            <span class="size-2 shrink-0 rounded-full {{ $active ? 'bg-[#14123f]' : 'border border-slate-400' }}"></span>
                             {{ $label }}
                         </a>
                     @endforeach
                 </nav>
             @endforeach
+
+            <div class="mt-auto border-t border-slate-200 pt-5 pb-2">
+                <p class="text-[10px] font-bold tracking-wider text-slate-400 uppercase">Outlet Aktif</p>
+                <div class="mt-1 flex items-center justify-between text-xs font-semibold text-slate-700">
+                    <span>Semua outlet</span>
+                    <svg class="size-3.5 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" /></svg>
+                </div>
+            </div>
         </aside>
 
-        <main class="min-w-0 px-4 py-6 md:px-10 md:py-9">
+        <main class="min-w-0 bg-[#f6f8fb] px-6 py-6 md:px-10 md:py-8">
+            {{-- Top bar: tanggal & avatar --}}
+            <div class="flex items-center justify-end gap-3 mb-6">
+                <span class="text-xs font-medium text-slate-400">{{ now()->locale('id')->translatedFormat('l, d F Y') }}</span>
+                <div class="grid size-9 place-items-center rounded-full bg-[#14123f] text-xs font-bold text-white shadow-xs">MG</div>
+            </div>
+
             @yield('content')
         </main>
     </div>

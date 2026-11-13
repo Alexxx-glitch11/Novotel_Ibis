@@ -1,8 +1,11 @@
 <?php
 
+use App\Http\Controllers\Manager\CancellationApprovalController;
 use App\Http\Controllers\Manager\FloorPlanController;
 use App\Http\Controllers\Manager\MenuController;
+use App\Http\Controllers\Manager\ReportController;
 use App\Http\Controllers\Manager\TableController;
+use App\Http\Controllers\Manager\TaxServiceRateController;
 use App\Http\Controllers\FinanceLoginController;
 use App\Http\Controllers\FinancePaymentController;
 use App\Http\Controllers\TableSelectionController;
@@ -52,4 +55,13 @@ Route::prefix('manager')->name('manager.')->group(function () {
 
     Route::post('/denah/{area}', [FloorPlanController::class, 'store'])->name('floorplan.store');
     Route::delete('/denah/{area}', [FloorPlanController::class, 'destroy'])->name('floorplan.destroy');
+
+    Route::get('/persetujuan-batal', [CancellationApprovalController::class, 'index'])->name('cancellations.index');
+    Route::post('/persetujuan-batal/{cancellationRequest}/setujui', [CancellationApprovalController::class, 'approve'])->name('cancellations.approve');
+    Route::post('/persetujuan-batal/{cancellationRequest}/tolak', [CancellationApprovalController::class, 'reject'])->name('cancellations.reject');
+
+    Route::get('/tarif-layanan', [TaxServiceRateController::class, 'index'])->name('tax-service.index');
+    Route::post('/tarif-layanan/{outlet}', [TaxServiceRateController::class, 'update'])->name('tax-service.update');
+
+    Route::get('/laporan', [ReportController::class, 'index'])->name('reports.index');
 });
