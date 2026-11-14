@@ -117,3 +117,5 @@ Route::prefix('manager')->name('manager.')->group(function () {
     // Laporan
     Route::get('/laporan', [ReportController::class, 'index'])->name('reports.index');
 });
+
+require __DIR__.'/admin.php';
