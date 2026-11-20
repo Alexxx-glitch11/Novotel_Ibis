@@ -60,36 +60,72 @@
     @else
         <div class="mt-6 grid items-start gap-6 xl:grid-cols-2">
 
-            {{-- ===== DENAH ===== --}}
+            {{-- ===== DENAH & KURSI ALA BIOSKOP / BUS ===== --}}
             <section class="rounded-2xl bg-white p-5 ring-1 ring-slate-200 md:p-6">
-                <h2 class="text-xl font-bold">{{ __('manager.plan_title', ['area' => $area->name]) }}</h2>
-                <p class="text-sm text-slate-500">{{ __('manager.plan_sub') }}</p>
+                @php
+                    $sortedTables = $tables->sortBy('table_code', SORT_NATURAL | SORT_FLAG_CASE);
+                    $groupedRows = $sortedTables->groupBy(function ($t) {
+                        if (preg_match('/^([A-Za-z]+)/', (string) $t->table_code, $m)) {
+                            return strtoupper($m[1]);
+                        }
+                        return 'Meja';
+                    });
+                @endphp
 
-                <div id="denah-canvas"
-                     class="relative mt-4 w-full overflow-hidden rounded-xl bg-slate-50 ring-1 ring-slate-200 {{ $area->floor_plan_url ? '' : 'aspect-[4/3]' }}">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                        <h2 class="text-xl font-bold">{{ __('manager.plan_title', ['area' => $area->name]) }}</h2>
+                        <p class="text-sm text-slate-500">Pilih kursi/meja pada tata letak di bawah untuk mengubahnya.</p>
+                    </div>
                     @if ($area->floor_plan_url)
-                        <img src="{{ $area->floor_plan_url }}" alt="{{ __('manager.plan_alt', ['area' => $area->name]) }}" class="block h-auto w-full select-none" draggable="false">
-                    @else
-                        <div class="absolute inset-0 grid place-items-center px-6 text-center text-sm text-slate-400">{{ __('manager.no_plan') }}</div>
-                    @endif
-
-                    @foreach ($tables as $t)
-                        <button type="button" data-marker="{{ $t->tables_id }}" data-code="{{ $t->table_code }}"
-                                style="left: {{ $t->position_x }}%; top: {{ $t->position_y }}%"
-                                title="{{ __('manager.panel_edit', ['code' => $t->table_code]) }}"
-                                class="absolute -translate-x-1/2 -translate-y-1/2 rounded-lg border-2 px-2.5 py-1.5 text-sm font-semibold transition-[left,top]
-                                       {{ $t->is_active ? 'border-[#1f1d5c] bg-white text-[#1f1d5c]' : 'border-slate-300 bg-slate-200 text-slate-400' }}">
-                            {{ $t->table_code }}
+                        <button type="button" onclick="document.getElementById('manager-floorplan-modal').classList.remove('hidden'); document.getElementById('manager-floorplan-modal').classList.add('flex');"
+                                class="inline-flex items-center gap-1.5 rounded-lg bg-[#e8edff] px-3 py-2 text-xs font-semibold text-[#1f1d5c] hover:bg-[#dce3ff]">
+                            Lihat Denah Penuh
                         </button>
-                    @endforeach
+                    @endif
                 </div>
-                <p class="mt-2 text-xs text-slate-500">{{ __('manager.click_hint') }}</p>
 
-                {{-- Upload denah --}}
+                {{-- Grid Kursi ala Bioskop / Bus --}}
+                <div id="denah-canvas" class="mt-4 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200">
+                    @if ($sortedTables->isEmpty())
+                        <p class="py-10 text-center text-sm text-slate-400">{{ __('manager.no_tables') }}</p>
+                    @else
+                        <div class="space-y-3">
+                            @foreach ($groupedRows as $rowLabel => $rowTables)
+                                <div class="flex items-start gap-3">
+                                    <span class="mt-2 grid size-7 shrink-0 place-items-center rounded-md bg-slate-200 text-xs font-bold text-slate-700">{{ $rowLabel }}</span>
+                                    <div class="flex flex-wrap gap-2">
+                                        @foreach ($rowTables as $t)
+                                            <button type="button"
+                                                    data-marker="{{ $t->tables_id }}"
+                                                    data-code="{{ $t->table_code }}"
+                                                    title="{{ __('manager.panel_edit', ['code' => $t->table_code]) }}"
+                                                    class="flex h-14 min-w-[68px] flex-col items-center justify-center rounded-xl border-2 px-2.5 text-sm font-semibold transition
+                                                           {{ $t->is_active ? 'border-[#1f1d5c] bg-white text-[#1f1d5c] hover:bg-[#e8edff]' : 'border-slate-300 bg-slate-200 text-slate-400' }}">
+                                                <span class="text-xs font-bold leading-none">{{ $t->table_code }}</span>
+                                                <span class="mt-1 text-[10px] opacity-75">{{ $t->capacity }} org</span>
+                                            </button>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+
+                {{-- Upload & Pratinjau Denah Referensi --}}
                 <div class="mt-5 border-t border-slate-100 pt-5">
                     <h3 class="text-sm font-bold">{{ __('manager.plan_image') }}</h3>
+                    @if ($area->floor_plan_url)
+                        <div class="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-2">
+                            <img src="{{ $area->floor_plan_url }}" alt="{{ __('manager.plan_alt', ['area' => $area->name]) }}" class="mx-auto max-h-56 w-auto rounded-lg object-contain">
+                        </div>
+                    @else
+                        <p class="mt-2 text-xs text-slate-400">{{ __('manager.no_plan') }}</p>
+                    @endif
+
                     <form method="POST" action="{{ route('manager.floorplan.store', $area) }}" enctype="multipart/form-data"
-                          class="mt-2 flex flex-wrap items-center gap-3">
+                          class="mt-3 flex flex-wrap items-center gap-3">
                         @csrf
                         <input type="file" name="floor_plan" accept="image/png,image/jpeg,image/webp" required
                                class="min-w-0 flex-1 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-4 file:py-2 file:text-sm file:font-semibold hover:file:bg-slate-200">
@@ -97,7 +133,7 @@
                             {{ $area->floor_plan_path ? __('manager.plan_replace') : __('manager.plan_upload') }}
                         </button>
                     </form>
-                    <p class="mt-2 text-xs text-slate-500">{{ __('manager.plan_help') }}</p>
+                    <p class="mt-2 text-xs text-slate-500">Denah ini dapat diakses pelanggan sebagai panduan letak nomor meja/kursi (misal A12).</p>
 
                     @if ($area->floor_plan_path)
                         <form method="POST" action="{{ route('manager.floorplan.destroy', $area) }}" class="mt-2"
@@ -127,8 +163,8 @@
 
                         <div class="mt-3 grid gap-3 sm:grid-cols-2">
                             <div>
-                                <label for="f-code" class="{{ $label }}">{{ __('manager.f_code') }}</label>
-                                <input id="f-code" name="table_code" maxlength="20" required class="{{ $input }}">
+                                <label for="f-code" class="{{ $label }}">Kode meja / rentang</label>
+                                <input id="f-code" name="table_code" maxlength="40" required placeholder="Contoh: A1 atau A1-10" class="{{ $input }}">
                             </div>
                             <div>
                                 <label for="f-area" class="{{ $label }}">{{ __('manager.f_area') }}</label>
@@ -146,18 +182,10 @@
                                 <label for="f-min" class="{{ $label }}">{{ __('manager.f_min') }}</label>
                                 <input id="f-min" type="number" name="min_capacity" min="1" max="50" required class="{{ $input }}">
                             </div>
-                            <div>
-                                <label for="f-x" class="{{ $label }}">{{ __('manager.f_x') }}</label>
-                                <input id="f-x" type="number" name="position_x" min="0" max="100" step="0.5" required class="{{ $input }}">
-                                <input id="range-x" type="range" min="0" max="100" step="0.5" aria-label="{{ __('manager.range_x') }}" class="mt-2 w-full accent-[#1f1d5c]">
-                            </div>
-                            <div>
-                                <label for="f-y" class="{{ $label }}">{{ __('manager.f_y') }}</label>
-                                <input id="f-y" type="number" name="position_y" min="0" max="100" step="0.5" required class="{{ $input }}">
-                                <input id="range-y" type="range" min="0" max="100" step="0.5" aria-label="{{ __('manager.range_y') }}" class="mt-2 w-full accent-[#1f1d5c]">
-                            </div>
                         </div>
-                        <p class="mt-2 text-xs text-slate-500">{{ __('manager.f_hint') }}</p>
+                        <input id="f-x" type="hidden" name="position_x" value="50">
+                        <input id="f-y" type="hidden" name="position_y" value="50">
+                        <p id="f-code-hint" class="mt-2 text-xs text-slate-500">Isi satu kode (misal <strong>A1</strong>) atau rentang (misal <strong>A1-10</strong> atau <strong>A1-A10</strong>) untuk menambah banyak meja dalam sekali klik.</p>
 
                         <label class="mt-3 flex items-center gap-2 text-sm">
                             <input type="checkbox" name="is_active" value="1" id="f-active" class="size-4 accent-[#1f1d5c]">
@@ -222,6 +250,20 @@
         </div>
 
         <p class="mt-6 text-sm text-slate-500">{{ __('manager.tbl_footer') }}</p>
+
+        @if ($area->floor_plan_url)
+            <div id="manager-floorplan-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/75 p-4" role="dialog" aria-modal="true" onclick="if (event.target === this) { this.classList.add('hidden'); this.classList.remove('flex'); }">
+                <div class="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+                    <div class="flex items-center justify-between border-b border-slate-200 px-5 py-3.5">
+                        <h3 class="text-sm font-bold text-[#1f1d5c]">Denah {{ $area->name }} · {{ $outlet->name }}</h3>
+                        <button type="button" onclick="var m = document.getElementById('manager-floorplan-modal'); m.classList.add('hidden'); m.classList.remove('flex');" class="grid size-8 place-items-center rounded-lg bg-slate-100 text-sm font-semibold text-slate-600 hover:bg-red-50 hover:text-red-600">✕</button>
+                    </div>
+                    <div class="overflow-auto bg-slate-100 p-4">
+                        <img src="{{ $area->floor_plan_url }}" alt="Denah {{ $area->name }}" class="mx-auto max-h-[72vh] w-auto rounded-lg shadow-sm">
+                    </div>
+                </div>
+            </div>
+        @endif
     @endif
 @endsection
 
@@ -259,19 +301,18 @@
     function preview() {
         const m = current();
         if (!m) return;
-        m.style.left = clamp(f.x.value) + '%';
-        m.style.top = clamp(f.y.value) + '%';
-        m.textContent = f.code.value || '?';
+        const codeSpan = m.querySelector('span');
+        if (codeSpan) {
+            codeSpan.textContent = f.code.value || '?';
+        }
     }
 
     function reset() {
         Object.values(markers).forEach((o) => {
-            o.el.style.left = o.left;
-            o.el.style.top = o.top;
-            o.el.textContent = o.text;
+            const codeSpan = o.el.querySelector('span');
+            if (codeSpan) codeSpan.textContent = o.text;
             o.el.classList.remove(...hi);
         });
-        ghost?.remove();
         ghost = null;
         editingId = null;
     }
@@ -292,15 +333,10 @@
         f.x.value = data ? data.position_x : 50;
         f.y.value = data ? data.position_y : 50;
         f.active.checked = data ? data.is_active : true;
-        rx.value = f.x.value;
-        ry.value = f.y.value;
+        document.getElementById('f-code-hint').hidden = Boolean(data);
 
         if (data) {
             markers[editingId]?.el.classList.add(...hi);
-        } else {
-            ghost = document.createElement('div');
-            ghost.className = 'absolute -translate-x-1/2 -translate-y-1/2 rounded-lg border-2 border-dashed border-[#1f1d5c] bg-[#1f1d5c] px-2.5 py-1.5 text-sm font-semibold text-white ring-4 ring-[#1f1d5c]/20';
-            canvas.appendChild(ghost);
         }
 
         panel.hidden = false;
@@ -324,10 +360,6 @@
     Object.entries(markers).forEach(([id, o]) =>
         o.el.addEventListener('click', () => document.querySelector(`.js-edit[data-id="${id}"]`)?.click()));
 
-    f.x.addEventListener('input', () => { rx.value = f.x.value; preview(); });
-    f.y.addEventListener('input', () => { ry.value = f.y.value; preview(); });
-    rx.addEventListener('input', () => { f.x.value = rx.value; preview(); });
-    ry.addEventListener('input', () => { f.y.value = ry.value; preview(); });
     f.code.addEventListener('input', preview);
 })();
 </script>

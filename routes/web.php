@@ -1,5 +1,9 @@
 <?php
 
+use App\Http\Controllers\Auth\GoogleAuthController;
+use App\Http\Controllers\Auth\LoginController as AuthLoginController;
+use App\Http\Controllers\Cashier\DashboardController as CashierDashboardController;
+use App\Http\Controllers\Cashier\CheckInController as CashierCheckInController;
 use App\Http\Controllers\Manager\DashboardController;
 use App\Http\Controllers\Manager\ActivityController;
 use App\Http\Controllers\Manager\CancellationApprovalController;
@@ -15,9 +19,11 @@ use App\Http\Controllers\FinanceLoginController;
 use App\Http\Controllers\FinancePaymentController;
 use App\Http\Controllers\TableSelectionController;
 use App\Http\Controllers\GuestReservationController;
+use App\Http\Controllers\LiveUpdatesController;
 use App\Models\Outlet;
 use App\Models\OutletContent;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 
 
 Route::get('/', function () {
@@ -29,14 +35,23 @@ Route::get('/', function () {
             ->publishedOn()
             ->whereHas('outlet', fn ($query) => $query->where('is_active', true))
             ->orderBy('starts_on')
-            ->limit(6)
+            ->limit(20)
             ->get(),
     ]);
 })->name('home');
 
+Route::get('/media/outlet-content/{outletContent}', function (OutletContent $outletContent) {
+    $path = ltrim((string) $outletContent->image_path, '/');
+    abort_unless($path !== '' && Storage::disk('public')->exists($path), 404);
+
+    return Storage::disk('public')->response($path, null, [
+        'Cache-Control' => 'public, max-age=86400',
+    ]);
+})->whereNumber('outletContent')->name('outlet-content.image');
+
 // Halaman pelanggan: pilih meja (nama route sama, dipakai tombol di beranda)
 Route::get('/reservasi/{outlet}', [TableSelectionController::class, 'show'])->name('reservasi.outlet');
-Route::post('/reservasi/{outlet}/jadwal', [TableSelectionController::class, 'findTables'])->name('reservasi.schedule');
+Route::get('/reservasi/{outlet}/meja-tersedia', [TableSelectionController::class, 'availableTables'])->name('reservasi.availability');
 Route::post('/reservasi/{outlet}/meja/hold', [TableSelectionController::class, 'holdTable'])->name('reservasi.hold');
 Route::post('/reservasi/{outlet}/menu', [TableSelectionController::class, 'saveMenu'])->name('reservasi.menu');
 Route::post('/reservasi/{outlet}/konfirmasi', [TableSelectionController::class, 'confirm'])->name('reservasi.confirm');
@@ -57,15 +72,45 @@ Route::prefix('reservasi-saya')->name('guest.')->group(function () {
     Route::get('/{code}/pembatalan', [GuestReservationController::class, 'cancelStatus'])->name('cancel.status');
 });
 
-Route::get('/finance/login', [FinanceLoginController::class, 'create'])->name('finance.login');
-Route::get('/login', fn () => redirect()->route('finance.login'))->name('login');
-Route::post('/finance/login', [FinanceLoginController::class, 'store'])->middleware('throttle:6,1')->name('finance.login.store');
-Route::middleware(['auth', 'role:finance|admin'])->prefix('finance')->name('finance.')->group(function () {
+Route::get('/login', [AuthLoginController::class, 'create'])->name('login');
+Route::post('/login', [AuthLoginController::class, 'store'])->middleware('throttle:6,1')->name('login.store');
+Route::post('/logout', [AuthLoginController::class, 'destroy'])->name('logout');
+
+Route::get('/auth/google/redirect', [GoogleAuthController::class, 'redirect'])->name('auth.google.redirect');
+Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback'])->name('auth.google.callback');
+
+Route::get('/finance/login', fn () => redirect()->route('login'))->name('finance.login');
+Route::middleware(['portal:finance,finance|admin'])->prefix('finance')->name('finance.')->group(function () {
+    Route::redirect('/', '/finance/ringkasan');
+    Route::get('/live-status', [LiveUpdatesController::class, 'status'])->name('live-status');
+    Route::get('/ringkasan', [FinancePaymentController::class, 'dashboard'])->name('dashboard');
     Route::get('/pembayaran', [FinancePaymentController::class, 'index'])->name('payments.index');
+    Route::get('/pembayaran/{payment}', [FinancePaymentController::class, 'show'])->whereNumber('payment')->name('payments.show');
     Route::get('/pembayaran/{payment}/bukti', [FinancePaymentController::class, 'proof'])->name('payments.proof');
     Route::post('/pembayaran/{payment}/terima', [FinancePaymentController::class, 'approve'])->name('payments.approve');
     Route::post('/pembayaran/{payment}/tolak', [FinancePaymentController::class, 'reject'])->name('payments.reject');
-    Route::post('/logout', [FinanceLoginController::class, 'destroy'])->name('logout');
+    Route::get('/riwayat', [FinancePaymentController::class, 'history'])->name('history.index');
+    Route::get('/laporan', [FinancePaymentController::class, 'reports'])->name('reports.index');
+    Route::get('/laporan/ekspor', [FinancePaymentController::class, 'exportReports'])->name('reports.export');
+    Route::post('/logout', [AuthLoginController::class, 'destroy'])->name('logout');
+});
+
+Route::get('/cashier/login', fn () => redirect()->route('login'))->name('cashier.login');
+Route::middleware(['portal:cashier,cashier|kasir|admin'])->prefix('cashier')->name('cashier.')->group(function () {
+    Route::get('/', [CashierDashboardController::class, 'index'])->name('dashboard');
+    Route::get('/live-status', [LiveUpdatesController::class, 'status'])->name('live-status');
+    Route::get('/reservasi', [CashierDashboardController::class, 'reservations'])->name('reservations.index');
+    Route::get('/reservasi/{reservation}', [CashierDashboardController::class, 'showReservation'])->whereNumber('reservation')->name('reservations.show');
+    Route::get('/riwayat', [CashierDashboardController::class, 'history'])->name('history.index');
+    Route::get('/riwayat/ekspor', [CashierDashboardController::class, 'exportHistory'])->name('history.export');
+    Route::get('/pindai-qr', [CashierDashboardController::class, 'history'])->name('qr.index');
+    Route::get('/pembatalan', [CashierDashboardController::class, 'cancellations'])->name('cancellations.index');
+    Route::post('/pembatalan', [CashierDashboardController::class, 'storeCancellation'])->name('cancellations.store');
+    Route::post('/check-in/scan', [CashierCheckInController::class, 'scan'])->name('checkin.scan');
+    Route::post('/check-in/{reservation}', [CashierCheckInController::class, 'record'])->whereNumber('reservation')->name('checkin.record');
+    Route::post('/check-in/{reservation}/selesai', [CashierCheckInController::class, 'complete'])->whereNumber('reservation')->name('checkin.complete');
+    Route::post('/check-in/{reservation}/no-show', [CashierCheckInController::class, 'markNoShow'])->whereNumber('reservation')->name('checkin.no-show');
+    Route::post('/logout', [AuthLoginController::class, 'destroy'])->name('logout');
 });
 
 Route::get('/bahasa/{locale}', function (string $locale) {
@@ -74,10 +119,13 @@ Route::get('/bahasa/{locale}', function (string $locale) {
     return redirect()->back();
 })->name('lang.switch');
 
+Route::get('/manager/login', fn () => redirect()->route('login'))->name('manager.login');
+
 // Halaman manager.
-// TODO: setelah login manager siap, tambahkan ->middleware(['auth', 'role:manager|admin'])
-Route::prefix('manager')->name('manager.')->group(function () {
+Route::middleware(['portal:manager,manager|admin'])->prefix('manager')->name('manager.')->group(function () {
+    Route::post('/logout', [AuthLoginController::class, 'destroy'])->name('logout');
     Route::redirect('/', '/manager/ringkasan');
+    Route::get('/live-status', [LiveUpdatesController::class, 'status'])->name('live-status');
     Route::get('/ringkasan', [DashboardController::class, 'index'])->name('dashboard');
 
     Route::get('/reservasi/ekspor', [ReservationController::class, 'export'])->name('reservations.export');

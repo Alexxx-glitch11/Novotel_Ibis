@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
 use App\Models\Outlet;
+use App\Services\OutletAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -16,7 +17,9 @@ class MenuController extends Controller
 {
     public function index(Request $request): View
     {
-        $outlets = Outlet::where('is_active', true)->orderBy('name')->get();
+        $outletQuery = Outlet::where('is_active', true)->ordered();
+        app(OutletAccess::class)->scope($outletQuery, $request->user());
+        $outlets = $outletQuery->get();
         $outlet = $outlets->firstWhere('outlets_id', (int) $request->query('outlet')) ?? $outlets->first();
         abort_if(! $outlet, 404, 'Belum ada outlet.');
 
@@ -36,6 +39,7 @@ class MenuController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validated($request);
+        app(OutletAccess::class)->assertCanAccess($request->user(), (int) $data['outlets_id']);
         $imagePath = $request->file('image')?->store('', 'menu_uploads');
         $data['image_path'] = $imagePath ? 'uploads/menu-items/' . $imagePath : null;
         $item = MenuItem::create($data);
@@ -47,8 +51,10 @@ class MenuController extends Controller
 
     public function update(Request $request, MenuItem $menuItem): RedirectResponse
     {
+        app(OutletAccess::class)->assertCanAccess($request->user(), (int) $menuItem->outlets_id);
         $oldValues = $this->snapshot($menuItem);
         $data = $this->validated($request, $menuItem);
+        app(OutletAccess::class)->assertCanAccess($request->user(), (int) $menuItem->outlets_id);
         if ($request->hasFile('image')) {
             $data['image_path'] = 'uploads/menu-items/' . $request->file('image')->store('', 'menu_uploads');
         }
@@ -68,6 +74,7 @@ class MenuController extends Controller
         ], [
             'name.unique' => 'Nama kategori tersebut sudah ada di outlet ini.',
         ]);
+        app(OutletAccess::class)->assertCanAccess($request->user(), (int) $data['outlets_id']);
 
         $category = MenuCategory::create($data + ['is_active' => true]);
         $this->audit($request, 'menu_category_created', 'menu_category', $category->menu_categories_id, null, $category->only(['outlets_id', 'name', 'is_active']));

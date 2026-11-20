@@ -36,6 +36,12 @@
             </a>
         </div>
 
+        @if ($errors->any())
+            <div class="rounded-xl border border-red-200 bg-[#fff0ef] px-4 py-3 text-sm font-medium text-[#ab3333]" role="alert">
+                {{ $errors->first() }}
+            </div>
+        @endif
+
         <form method="GET" action="{{ route('manager.reservations.index') }}" class="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1.35fr_auto] xl:items-end">
             <label class="block text-xs font-semibold text-slate-500">
                 {{ __('manager.res_filter_date') }}
@@ -61,9 +67,19 @@
             </label>
             <label class="block text-xs font-semibold text-slate-500">
                 {{ __('manager.res_search_label') }}
-                <input type="search" name="q" value="{{ $filters['q'] }}" placeholder="{{ __('manager.res_search_placeholder') }}" class="mt-1.5 w-full rounded-lg border border-slate-200 bg-[#fbfcfe] px-3 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none">
+                <div class="relative mt-1.5">
+                    <svg class="pointer-events-none absolute left-3 top-1/2 size-[18px] -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+                    </svg>
+                    <input type="search" name="q" value="{{ $filters['q'] }}" placeholder="{{ __('manager.res_search_placeholder') }}" class="w-full rounded-lg border border-slate-200 bg-[#fbfcfe] py-2.5 pl-10 pr-3 text-sm text-slate-700 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none">
+                </div>
             </label>
-            <button class="rounded-lg bg-[#201f5c] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#151442]">{{ __('manager.apply_filters') }}</button>
+            <div class="flex items-center gap-2">
+                <button class="rounded-lg bg-[#201f5c] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#151442]">{{ __('manager.apply_filters') }}</button>
+                @if ($filters['date'] !== '' || $filters['status'] !== 'all' || $filters['q'] !== '')
+                    <a href="{{ route('manager.reservations.index', array_filter(['outlet' => $filters['outlet'] !== 'all' ? $filters['outlet'] : null])) }}" class="rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">Reset</a>
+                @endif
+            </div>
         </form>
 
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -74,7 +90,7 @@
                 ['↗', 'violet', __('manager.res_arrived'), $stats['arrived'], __('manager.res_arrived_note')],
             ] as [$letter, $tone, $label, $value, $note])
                 <article class="flex min-h-24 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <span class="grid size-9 shrink-0 place-items-center rounded-lg {{ ['blue' => 'bg-indigo-50 text-indigo-800', 'amber' => 'bg-amber-50 text-amber-700', 'green' => 'bg-emerald-50 text-emerald-700', 'violet' => 'bg-violet-50 text-violet-700'][$tone] }} text-sm font-bold">{{ $letter }}</span>
+                    <span translate="no" class="grid size-9 shrink-0 place-items-center rounded-lg {{ ['blue' => 'bg-indigo-50 text-indigo-800', 'amber' => 'bg-amber-50 text-amber-700', 'green' => 'bg-emerald-50 text-emerald-700', 'violet' => 'bg-violet-50 text-violet-700'][$tone] }} text-sm font-bold">{{ $letter }}</span>
                     <div class="min-w-0">
                         <p class="text-xs font-medium text-slate-500">{{ $label }}</p>
                         <p class="mt-0.5 text-2xl font-bold leading-none text-[#151442]">{{ $value }}</p>

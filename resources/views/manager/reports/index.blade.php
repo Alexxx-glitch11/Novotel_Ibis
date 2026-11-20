@@ -34,9 +34,7 @@
             <label class="block text-[10px] font-bold tracking-wider text-slate-400 uppercase mb-1.5">RENTANG TANGGAL</label>
             <div class="relative">
                 <select name="date_range" class="w-full appearance-none rounded-xl border border-slate-200 bg-[#fbfcfe] px-4 py-2.5 text-xs font-medium text-slate-700 focus:border-indigo-400 focus:outline-none pr-8">
-                    <option value="2026-10-24_2026-10-30" @selected($selectedRange === '2026-10-24_2026-10-30')>24–30 Okt 2026</option>
-                    <option value="2026-10-01_2026-10-31" @selected($selectedRange === '2026-10-01_2026-10-31')>Bulan Ini (Okt 2026)</option>
-                    <option value="2026-10-17_2026-10-23" @selected($selectedRange === '2026-10-17_2026-10-23')>Minggu Lalu</option>
+                    @foreach ($rangeOptions as $value => $label)<option value="{{ $value }}" @selected($selectedRange === $value)>{{ $label }}</option>@endforeach
                 </select>
                 <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3.5 text-slate-400">
                     <svg class="size-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" /></svg>
@@ -49,9 +47,7 @@
             <label class="block text-[10px] font-bold tracking-wider text-slate-400 uppercase mb-1.5">STATUS PEMBAYARAN</label>
             <div class="relative">
                 <select name="payment_status" class="w-full appearance-none rounded-xl border border-slate-200 bg-[#fbfcfe] px-4 py-2.5 text-xs font-medium text-slate-700 focus:border-indigo-400 focus:outline-none pr-8">
-                    <option value="paid" @selected($selectedPaymentStatus === 'paid')>Paid</option>
-                    <option value="pending_verification" @selected($selectedPaymentStatus === 'pending_verification')>Pending Verification</option>
-                    <option value="all" @selected($selectedPaymentStatus === 'all')>Semua status</option>
+                    <option value="paid" selected>Paid</option>
                 </select>
                 <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3.5 text-slate-400">
                     <svg class="size-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" /></svg>

@@ -20,6 +20,7 @@ class AdminRolePermissionSeeder extends Seeder
 
         $adminPermissions = [
             'admin.dashboard.view',
+            'admin.reservations.view',
             'admin.outlets.view',
             'admin.outlets.manage',
             'admin.tables.view',

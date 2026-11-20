@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Manager;
 use App\Http\Controllers\Controller;
 use App\Models\Outlet;
 use App\Models\Reservation;
+use App\Services\OutletAccess;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
@@ -19,42 +21,76 @@ class ReservationController extends Controller
         'completed', 'cancelled', 'expired', 'no_show',
     ];
 
-    public function index(Request $request): View
+    public function index(Request $request): View|RedirectResponse
     {
         $filters = $this->filters($request);
-        $outlets = Outlet::ordered()->get();
-        $base = $this->baseQuery($filters);
+        $outletsQuery = Outlet::where('is_active', true)->ordered();
+        app(OutletAccess::class)->scope($outletsQuery, $request->user());
+        $outlets = $outletsQuery->get();
+        if ($filters['outlet'] === 'all' && $outlets->count() === 1) {
+            $filters['outlet'] = (string) $outlets->first()->outlets_id;
+        }
+        $activeOutletIds = $outlets->pluck('outlets_id')->map(fn ($id) => (int) $id)->all();
+
+        $lookup = trim((string) $request->query('lookup', ''));
+        if ($lookup !== '') {
+            $found = Reservation::query()
+                ->when($filters['allowed_outlet_ids'] !== null, fn (Builder $q) => $q->whereIn('outlets_id', $filters['allowed_outlet_ids']))
+                ->when($filters['allowed_outlet_ids'] === null && $activeOutletIds !== [], fn (Builder $q) => $q->whereIn('outlets_id', $activeOutletIds))
+                ->when(strlen($lookup) === 64, fn (Builder $q) => $q->whereHas('qrToken', fn (Builder $t) => $t->where('token', $lookup)))
+                ->when(strlen($lookup) !== 64, fn (Builder $q) => $q->whereRaw('LOWER(reservation_code) = ?', [mb_strtolower($lookup)]))
+                ->first();
+
+            if (! $found) {
+                $msg = app()->getLocale() === 'en'
+                    ? 'QR or reservation code "' . e(mb_substr($lookup, 0, 40)) . '" was not found.'
+                    : 'QR atau kode reservasi "' . e(mb_substr($lookup, 0, 40)) . '" tidak ditemukan.';
+
+                return redirect()
+                    ->route('manager.reservations.index', array_filter([
+                        'outlet' => $filters['outlet'] !== 'all' ? $filters['outlet'] : null,
+                    ]))
+                    ->withErrors(['lookup' => $msg]);
+            }
+
+            return redirect()->route('manager.reservations.show', ['reservation' => $found->reservations_id]);
+        }
+
+        $base = $this->baseQuery($filters, $activeOutletIds);
 
         $stats = [
             'total' => (clone $base)->count(),
-            'waiting' => (clone $base)->whereHas('latestPayment', fn (Builder $q) => $q->where('payment_status', 'pending_verification'))->count(),
+            'waiting' => (clone $base)->where('reservation_status', 'pending_payment')->count(),
             'confirmed' => (clone $base)->whereIn('reservation_status', ['confirmed', 'partially_arrived', 'checked_in', 'completed'])->count(),
             'arrived' => (clone $base)->whereIn('reservation_status', ['checked_in', 'completed'])->count(),
         ];
 
         $reservations = $this->applyFilters(clone $base, $filters)
             ->with(['outlet', 'tables.area', 'latestPayment'])
-            ->orderByDesc('reservation_date')
-            ->orderByDesc('start_time')
+            ->orderByDesc('created_at')
             ->orderByDesc('reservations_id')
             ->paginate(6)
             ->withQueryString();
 
         $lastUpdated = (clone $base)->max('updated_at');
+        $dateLabel = $filters['date'] !== ''
+            ? Carbon::parse($filters['date'])->locale(app()->getLocale())->translatedFormat('d F Y')
+            : (app()->getLocale() === 'en' ? 'Today & upcoming' : 'Hari ini & mendatang');
 
         return view('manager.reservations.index', [
             'outlets' => $outlets,
             'filters' => $filters,
             'stats' => $stats,
             'reservations' => $reservations,
-            'dateLabel' => Carbon::parse($filters['date'])->locale(app()->getLocale())->translatedFormat('d F Y'),
+            'dateLabel' => $dateLabel,
             'lastUpdated' => $lastUpdated ? Carbon::parse($lastUpdated)->locale(app()->getLocale())->translatedFormat('H.i') : null,
             'reservationStatuses' => self::STATUSES,
         ]);
     }
 
-    public function show(Reservation $reservation): View
+    public function show(Request $request, Reservation $reservation, OutletAccess $outletAccess): View
     {
+        $outletAccess->assertCanAccess($request->user(), (int) $reservation->outlets_id);
         $reservation->load([
             'outlet',
             'tables.area',
@@ -79,10 +115,13 @@ class ReservationController extends Controller
     public function export(Request $request): StreamedResponse
     {
         $filters = $this->filters($request);
-        $rows = $this->applyFilters($this->baseQuery($filters), $filters)
+        $outletsQuery = Outlet::where('is_active', true)->ordered();
+        app(OutletAccess::class)->scope($outletsQuery, $request->user());
+        $activeOutletIds = $outletsQuery->pluck('outlets_id')->map(fn ($id) => (int) $id)->all();
+        $rows = $this->applyFilters($this->baseQuery($filters, $activeOutletIds), $filters)
             ->with(['outlet', 'tables', 'latestPayment'])
-            ->orderByDesc('reservation_date')
-            ->orderByDesc('start_time')
+            ->orderByDesc('created_at')
+            ->orderByDesc('reservations_id')
             ->lazy(500);
 
         return response()->streamDownload(function () use ($rows): void {
@@ -109,7 +148,7 @@ class ReservationController extends Controller
             }
 
             fclose($stream);
-        }, 'reservasi-manager-' . $filters['date'] . '.csv', [
+        }, 'reservasi-manager-' . ($filters['date'] ?: now()->toDateString()) . '.csv', [
             'Content-Type' => 'text/csv; charset=UTF-8',
         ]);
     }
@@ -123,19 +162,33 @@ class ReservationController extends Controller
             'q' => ['nullable', 'string', 'max:100'],
         ]);
 
+        $user = $request->user();
+        $allowedOutletIds = null;
+        if (! app(OutletAccess::class)->isGlobal($user)) {
+            $allowedOutletIds = app(OutletAccess::class)->outletIds($user);
+            abort_if(isset($filters['outlet']) && $filters['outlet'] !== 'all' && ! in_array((int) $filters['outlet'], $allowedOutletIds, true), 404);
+        }
+
         return [
-            'date' => $filters['date'] ?? now()->toDateString(),
+            'date' => $filters['date'] ?? '',
             'outlet' => $filters['outlet'] ?? 'all',
+            'allowed_outlet_ids' => $allowedOutletIds,
             'status' => $filters['status'] ?? 'all',
             'q' => trim($filters['q'] ?? ''),
         ];
     }
 
-    private function baseQuery(array $filters): Builder
+    /** @param list<int> $activeOutletIds */
+    private function baseQuery(array $filters, array $activeOutletIds = []): Builder
     {
+        $today = now(config('reservation.timezone', 'Asia/Jakarta'))->toDateString();
+
         return Reservation::query()
-            ->whereDate('reservation_date', $filters['date'])
-            ->when($filters['outlet'] !== 'all', fn (Builder $q) => $q->where('outlets_id', (int) $filters['outlet']));
+            ->when($filters['date'] !== '', fn (Builder $q) => $q->whereDate('reservation_date', $filters['date']))
+            ->when($filters['date'] === '', fn (Builder $q) => $q->whereDate('reservation_date', '>=', $today))
+            ->when($filters['outlet'] !== 'all', fn (Builder $q) => $q->where('outlets_id', (int) $filters['outlet']))
+            ->when($filters['outlet'] === 'all' && $filters['allowed_outlet_ids'] !== null, fn (Builder $q) => $q->whereIn('outlets_id', $filters['allowed_outlet_ids']))
+            ->when($filters['outlet'] === 'all' && $filters['allowed_outlet_ids'] === null && $activeOutletIds !== [], fn (Builder $q) => $q->whereIn('outlets_id', $activeOutletIds));
     }
 
     private function applyFilters(Builder $query, array $filters): Builder

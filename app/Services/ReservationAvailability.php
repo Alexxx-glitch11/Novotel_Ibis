@@ -21,7 +21,6 @@ class ReservationAvailability
         int $guestCount,
         ?int $ignoreReservationId = null,
     ): Collection {
-        $paymentHoldCutoff = now()->subMinutes((int) config('reservation.payment_proof_hold_minutes', 30));
         $reservedTableQuery = DB::table('reservation_tables')
             ->join('reservations', 'reservations.reservations_id', '=', 'reservation_tables.reservations_id')
             ->whereDate('reservations.reservation_date', $date)
@@ -33,29 +32,7 @@ class ReservationAvailability
         }
 
         $reservedTableIds = $reservedTableQuery
-            ->where(function ($query) use ($paymentHoldCutoff): void {
-                $query->whereIn('reservations.reservation_status', ['confirmed', 'partially_arrived', 'checked_in'])
-                    ->orWhere(function ($pending) use ($paymentHoldCutoff): void {
-                        $pending->where('reservations.reservation_status', 'pending_payment')
-                            ->whereExists(function ($payment) use ($paymentHoldCutoff): void {
-                                $payment->selectRaw('1')
-                                    ->from('payments')
-                                    ->whereColumn('payments.reservations_id', 'reservations.reservations_id')
-                                    ->where(function ($activePayment) use ($paymentHoldCutoff): void {
-                                        $activePayment->where(function ($unpaid) use ($paymentHoldCutoff): void {
-                                            $unpaid->where('payments.payment_status', 'unpaid')
-                                                ->where('payments.created_at', '>=', $paymentHoldCutoff);
-                                        })->orWhere(function ($submitted) use ($paymentHoldCutoff): void {
-                                            $submitted->where('payments.payment_status', 'pending_verification')
-                                                ->where('payments.proof_uploaded_at', '>=', $paymentHoldCutoff);
-                                        })->orWhere(function ($rejected) use ($paymentHoldCutoff): void {
-                                            $rejected->where('payments.payment_status', 'rejected')
-                                                ->where('payments.verified_at', '>=', $paymentHoldCutoff);
-                                        });
-                                    });
-                            });
-                    });
-            })
+            ->whereIn('reservations.reservation_status', ['pending_payment', 'confirmed', 'partially_arrived', 'checked_in'])
             ->select('reservation_tables.tables_id');
 
         $heldTableIds = DB::table('reservation_hold_items')

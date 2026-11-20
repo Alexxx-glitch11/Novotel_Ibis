@@ -11,11 +11,16 @@ class FinanceLoginController extends Controller
 {
     public function create(): View|RedirectResponse
     {
-        if (Auth::check()) {
-            return redirect()->route('finance.payments.index');
+        if (Auth::check() && Auth::user()->hasAnyRole(['finance', 'admin'])) {
+            return redirect()->route('finance.dashboard');
         }
 
-        return view('finance.login');
+        return view('auth.portal-login', [
+            'portal' => 'finance',
+            'title' => 'Masuk Finance',
+            'subtitle' => 'Masuk dengan akun Finance hotel untuk memeriksa bukti pembayaran.',
+            'action' => route('finance.login.store'),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -33,10 +38,10 @@ class FinanceLoginController extends Controller
             $request->session()->invalidate();
             $request->session()->regenerateToken();
 
-            return back()->withErrors(['email' => 'Akun ini tidak memiliki akses finance.'])->onlyInput('email');
+            return back()->withErrors(['email' => 'Akun ini tidak memiliki akses Finance.'])->onlyInput('email');
         }
 
-        return redirect()->intended(route('finance.payments.index'));
+        return redirect()->intended(route('finance.dashboard'));
     }
 
     public function destroy(Request $request): RedirectResponse

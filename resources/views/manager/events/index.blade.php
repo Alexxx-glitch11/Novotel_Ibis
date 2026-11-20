@@ -106,8 +106,8 @@
                     <h2 class="font-semibold text-[#151442]">{{ __('manager.event_preview') }}</h2>
                     @if ($contentPreview)
                         <div class="mt-4 overflow-hidden rounded-xl border border-slate-100">
-                            @if ($contentPreview->image_path)
-                                <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($contentPreview->image_path) }}" alt="{{ $contentPreview->title }}" class="h-40 w-full object-cover">
+                            @if ($contentPreview->image_url)
+                                <img src="{{ $contentPreview->image_url }}" alt="{{ $contentPreview->title }}" class="h-48 w-full bg-slate-50 object-contain">
                             @else
                                 <div class="grid h-40 place-items-center bg-indigo-50 text-xs font-semibold tracking-wide text-indigo-800">{{ __('manager.event_image_placeholder') }}</div>
                             @endif
@@ -115,6 +115,32 @@
                                 <p class="text-lg font-bold text-[#151442]">{{ $contentPreview->title }}</p>
                                 <p class="mt-1 text-sm leading-relaxed text-slate-500">{{ $contentPreview->description }}</p>
                                 <p class="mt-3 text-xs font-medium text-slate-600">{{ $contentPreview->outlet?->name }} · {{ $contentPreview->starts_on?->locale(app()->getLocale())->translatedFormat('d F Y') ?? __('manager.event_no_start') }}@if($contentPreview->ends_on)–{{ $contentPreview->ends_on->locale(app()->getLocale())->translatedFormat('d F Y') }}@endif</p>
+                                @if ($contentPreview->content_type === 'event')
+                                    <div class="mt-3 flex flex-wrap gap-2">
+                                        <span class="rounded-full px-2.5 py-1 text-[11px] font-semibold {{ $contentPreview->requires_table ? 'bg-indigo-50 text-[#201f5c]' : 'bg-amber-50 text-amber-800' }}">
+                                            {{ $contentPreview->requires_table ? 'Wajib pilih kursi' : 'Tanpa pilih kursi' }}
+                                        </span>
+                                        <span class="rounded-full px-2.5 py-1 text-[11px] font-semibold {{ $contentPreview->requires_menu ? 'bg-indigo-50 text-[#201f5c]' : 'bg-amber-50 text-amber-800' }}">
+                                            {{ $contentPreview->requires_menu ? 'Wajib pilih menu' : 'Tanpa pilih menu' }}
+                                        </span>
+                                        @if ((float) $contentPreview->price_per_pax > 0)
+                                            <span class="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
+                                                Paket Rp{{ number_format((float) $contentPreview->price_per_pax, 0, ',', '.') }}/pax
+                                            </span>
+                                        @endif
+                                    </div>
+                                @elseif ($contentPreview->content_type === 'promotion')
+                                    <div class="mt-3 flex flex-wrap gap-2">
+                                        <span class="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-[#201f5c]">
+                                            Otomatis di Kategori Menu: Promosi
+                                        </span>
+                                        @if ((float) $contentPreview->price_per_pax > 0)
+                                            <span class="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
+                                                Harga Menu Promo: Rp{{ number_format((float) $contentPreview->price_per_pax, 0, ',', '.') }}
+                                            </span>
+                                        @endif
+                                    </div>
+                                @endif
                                 <a href="{{ route('manager.events.index', [...$filtersForSelection, 'edit' => $contentPreview->outlet_contents_id]) }}" class="mt-4 flex w-full items-center justify-center rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-[#201f5c] hover:bg-indigo-50">{{ __('manager.event_edit') }}</a>
                             </div>
                         </div>
@@ -154,7 +180,7 @@
                         </label>
                         <div class="grid gap-4 sm:grid-cols-2">
                             <label class="block text-sm font-medium text-slate-700">{{ __('manager.event_type') }}
-                                <select name="content_type" required class="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm">
+                                <select id="event-content-type" name="content_type" required class="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm">
                                     <option value="promotion" @selected(old('content_type', $editingContent?->content_type ?? 'promotion') === 'promotion')>{{ __('manager.content_type_promotion') }}</option>
                                     <option value="event" @selected(old('content_type', $editingContent?->content_type) === 'event')>{{ __('manager.content_type_event') }}</option>
                                 </select>
@@ -167,6 +193,33 @@
                                     @endforeach
                                 </select>
                                 @error('status')<span class="mt-1 block text-xs text-rose-600">{{ $message }}</span>@enderror
+                            </label>
+                        </div>
+
+                        @php
+                            $isEventType = old('content_type', $editingContent?->content_type ?? 'promotion') === 'event';
+                            $reqTableChecked = old('_token') ? (bool) old('requires_table') : ($editingContent ? (bool) $editingContent->requires_table : true);
+                            $reqMenuChecked = old('_token') ? (bool) old('requires_menu') : ($editingContent ? (bool) $editingContent->requires_menu : true);
+                        @endphp
+                        <div id="event-flow-settings" class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                            <div id="event-checkboxes-wrap" class="{{ $isEventType ? '' : 'hidden' }}">
+                                <p class="text-xs font-semibold uppercase tracking-wide text-[#201f5c]">Aturan Alur Reservasi Event</p>
+                                <p class="mt-0.5 text-xs text-slate-500">Atur apakah pelanggan wajib memilih kursi/meja dan menu saat mendaftar event ini.</p>
+                                <div class="mt-3 mb-3 grid gap-3 sm:grid-cols-2">
+                                    <label class="flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
+                                        <input type="checkbox" name="requires_table" value="1" @checked($reqTableChecked) class="size-4 accent-[#201f5c]">
+                                        <span>Wajib pilih kursi / meja</span>
+                                    </label>
+                                    <label class="flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
+                                        <input type="checkbox" name="requires_menu" value="1" @checked($reqMenuChecked) class="size-4 accent-[#201f5c]">
+                                        <span>Wajib pilih menu</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <label class="block text-sm font-medium text-slate-700">
+                                <span id="event-price-label">{{ $isEventType ? 'Harga paket per orang / pax (Rp, opsional)' : 'Harga menu promosi (Rp)' }}</span>
+                                <input type="number" name="price_per_pax" min="0" step="1000" value="{{ old('price_per_pax', $editingContent ? (float) $editingContent->price_per_pax : 0) }}" class="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none">
+                                <span id="event-price-help" class="mt-1 block text-xs font-normal text-slate-400">{{ $isEventType ? 'Diisi bila event tidak memilih menu (misal Buffet/Gala Dinner). Subtotal otomatis dihitung dari jumlah tamu × harga paket.' : "Otomatis masuk dan ter-update ke dalam kategori 'Promosi' pada menu outlet ini." }}</span>
                             </label>
                         </div>
                         <label class="block text-sm font-medium text-slate-700">{{ __('manager.event_name') }}
@@ -208,5 +261,28 @@
         document.getElementById('event-modal')?.addEventListener('click', event => {
             if (event.target === event.currentTarget) window.location.href = @js(route('manager.events.index', $filtersForSelection));
         });
+        const eventTypeSelect = document.getElementById('event-content-type');
+        const eventCheckboxesWrap = document.getElementById('event-checkboxes-wrap');
+        const eventPriceLabel = document.getElementById('event-price-label');
+        const eventPriceHelp = document.getElementById('event-price-help');
+        const syncContentTypeFields = () => {
+            if (!eventTypeSelect) return;
+            const isEvent = eventTypeSelect.value === 'event';
+            if (eventCheckboxesWrap) eventCheckboxesWrap.classList.toggle('hidden', !isEvent);
+            if (eventPriceLabel) {
+                eventPriceLabel.textContent = isEvent
+                    ? 'Harga paket per orang / pax (Rp, opsional)'
+                    : 'Harga menu promosi (Rp)';
+            }
+            if (eventPriceHelp) {
+                eventPriceHelp.textContent = isEvent
+                    ? 'Diisi bila event tidak memilih menu (misal Buffet/Gala Dinner). Subtotal otomatis dihitung dari jumlah tamu × harga paket.'
+                    : "Otomatis masuk dan ter-update ke dalam kategori 'Promosi' pada menu outlet ini.";
+            }
+        };
+        if (eventTypeSelect) {
+            eventTypeSelect.addEventListener('change', syncContentTypeFields);
+            syncContentTypeFields();
+        }
     </script>
 @endsection

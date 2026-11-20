@@ -7,10 +7,10 @@
         <div class="admin-section-heading"><h2>Outlet terdaftar</h2><button class="admin-button admin-primary" type="button" data-toggle="outlet-form">+ Tambah outlet</button></div>
         <form id="outlet-form" class="admin-form-box" method="post" action="{{ route('admin.outlets.store') }}" @if(!old('code') && !$errors->has('name') && !$errors->has('code') && !$errors->has('address') && !$errors->has('phone')) hidden @endif>@csrf
             <div class="admin-form-grid"><label>Nama outlet<input name="name" maxlength="100" required value="{{ old('name') }}" placeholder="Contoh: Novotel Food Exchange"></label><label>Kode outlet<input name="code" maxlength="20" required value="{{ old('code') }}" placeholder="NOV"></label><label>Telepon (opsional)<input name="phone" maxlength="20" value="{{ old('phone') }}"></label><label class="admin-span-2">Alamat (opsional)<input name="address" maxlength="2000" value="{{ old('address') }}"></label></div>
-            <p class="admin-help">Jam operasional belum tersedia pada skema database saat ini.</p><div class="admin-form-actions"><button class="admin-button admin-primary">Simpan outlet</button><button class="admin-button" type="button" data-toggle="outlet-form">Batal</button></div>
+            <div class="admin-form-actions"><button class="admin-button admin-primary">Simpan outlet</button><button class="admin-button" type="button" data-toggle="outlet-form">Batal</button></div>
         </form>
-        <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>OUTLET</th><th>KODE</th><th>JAM OPERASIONAL</th><th>STATUS</th></tr></thead><tbody>
-        @forelse ($outlets as $outlet)<tr><td><strong>{{ $outlet->name }}</strong><small class="admin-cell-note">{{ $outlet->areas->count() }} area</small></td><td>{{ $outlet->code }}</td><td class="admin-muted">Belum dikonfigurasi</td><td><span class="admin-badge {{ $outlet->is_active ? 'is-active' : 'is-inactive' }}">{{ $outlet->is_active ? 'Aktif' : 'Nonaktif' }}</span></td></tr>
+        <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>OUTLET</th><th>KODE</th><th>STATUS</th><th>AKSI</th></tr></thead><tbody>
+        @forelse ($outlets as $outlet)<tr><td><strong>{{ $outlet->name }}</strong><small class="admin-cell-note">{{ $outlet->areas->count() }} area</small></td><td>{{ $outlet->code }}</td><td><span class="admin-badge {{ $outlet->is_active ? 'is-active' : 'is-inactive' }}">{{ $outlet->is_active ? 'Aktif' : 'Nonaktif' }}</span></td><td><form method="post" action="{{ route('admin.outlets.toggle', $outlet) }}">@csrf @method('put')<input type="hidden" name="is_active" value="{{ $outlet->is_active ? 0 : 1 }}"><button type="submit" class="admin-button admin-outline" style="min-height:32px;padding:4px 12px;font-size:12px;">{{ $outlet->is_active ? 'Nonaktifkan' : 'Aktifkan' }}</button></form></td></tr>
         @empty<tr><td colspan="4" class="admin-empty">Belum ada outlet.</td></tr>@endforelse
         </tbody></table></div>
     </section>
@@ -30,5 +30,5 @@
         @empty<div class="admin-empty-inline">Tambahkan outlet sebelum membuat area.</div>@endforelse
     </section>
 </div>
-<div class="admin-note">Outlet dan area ditampilkan dalam alur reservasi setelah data operasional dikonfigurasi.</div>
+<div class="admin-note">Outlet yang dinonaktifkan otomatis tidak tampil untuk reservasi pelanggan maupun opsi outlet aktif pada portal operasional.</div>
 @endsection

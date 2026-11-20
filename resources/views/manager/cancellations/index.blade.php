@@ -63,8 +63,9 @@
                         'Tamu' => $r?->customer_name,
                         'Kode reservasi' => $r?->reservation_code,
                         'Outlet & meja' => $r?->outlet?->name . '  ' . $tables->pluck('table_code')->join(', ') . ' ' . ($tables->first()?->area?->name ?? ''),
-                        'Jadwal' => $r?->reservation_date?->locale('id')->translatedFormat('l, d M Y') . '  ' . str_replace(':', '.', substr($r?->start_time ?? '', 0, 5)),
+                        'Jadwal' => $r?->reservation_date?->locale(app()->getLocale())->translatedFormat('l, d M Y') . '  ' . str_replace(':', '.', substr($r?->start_time ?? '', 0, 5)),
                         'Pembayaran' => ucfirst($pay?->payment_status ?? 'belum ada') . '  Rp' . number_format($r?->grand_total ?? 0, 0, ',', '.'),
+                        'Catatan pelanggan' => $r?->notes ?: '—',
                     ];
                 @endphp
 

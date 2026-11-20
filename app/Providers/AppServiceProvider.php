@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\CancellationRequest;
 use App\Models\Payment;
 use App\Models\Reservation;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
 
@@ -19,6 +20,8 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        Paginator::defaultView('partials.pagination');
+
         $notify = function () {
             // Kirim setelah transaksi database selesai, supaya dashboard tidak membaca data setengah jadi.
             DB::afterCommit(function () {

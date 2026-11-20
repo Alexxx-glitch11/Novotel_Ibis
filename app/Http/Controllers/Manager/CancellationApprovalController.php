@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\CancellationRequest;
 use App\Models\Outlet;
+use App\Services\OutletAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -15,8 +16,15 @@ class CancellationApprovalController extends Controller
 {
     public function index(Request $request): View
     {
-        $outlets = Outlet::where('is_active', true)->orderBy('name')->get();
+        $outletQuery = Outlet::where('is_active', true)->ordered();
+        app(OutletAccess::class)->scope($outletQuery, $request->user());
+        $outlets = $outletQuery->get();
         $selectedOutletId = $request->has('outlet') ? (int) $request->query('outlet') : 0;
+        $allowedOutletIds = null;
+        if (! app(OutletAccess::class)->isGlobal($request->user())) {
+            $allowedOutletIds = app(OutletAccess::class)->outletIds($request->user());
+            abort_if($selectedOutletId > 0 && ! in_array($selectedOutletId, $allowedOutletIds, true), 404);
+        }
         $statusFilter = $request->query('status', 'pending');
 
         $query = CancellationRequest::with([
@@ -25,18 +33,20 @@ class CancellationApprovalController extends Controller
             'reservation.latestPayment',
             'reviewedBy',
         ]);
+        if ($allowedOutletIds !== null) {
+            $query->whereHas('reservation', fn ($q) => $q->whereIn('outlets_id', $allowedOutletIds));
+        }
 
         if ($selectedOutletId > 0) {
             $query->whereHas('reservation', function ($q) use ($selectedOutletId) {
                 $q->where('outlets_id', $selectedOutletId);
             });
         }
-
         if (in_array($statusFilter, ['pending', 'approved', 'rejected'], true)) {
             $query->where('status', $statusFilter);
         }
 
-        $cancellations = $query->latest('created_at')->get();
+        $cancellations = $query->latest('created_at')->latest('cancellation_requests_id')->get();
 
         // Cari item yang sedang dipilih (default item pertama jika tidak ditentukan)
         $selectedId = (int) $request->query('selected');
@@ -49,6 +59,12 @@ class CancellationApprovalController extends Controller
                 $q->where('outlets_id', $selectedOutletId);
             }
         })->where('status', 'pending')->count();
+        if ($allowedOutletIds !== null) {
+            $pendingCount = CancellationRequest::whereHas('reservation', fn ($q) => $q->whereIn('outlets_id', $allowedOutletIds))
+                ->where('status', 'pending')
+                ->when($selectedOutletId > 0, fn ($q) => $q->whereHas('reservation', fn ($r) => $r->where('outlets_id', $selectedOutletId)))
+                ->count();
+        }
 
         return view('manager.cancellations.index', compact(
             'outlets',
@@ -75,6 +91,8 @@ class CancellationApprovalController extends Controller
             abort_unless($locked->status === 'pending', 409, 'Permintaan pembatalan ini sudah diproses sebelumnya.');
 
             $reservation = $locked->reservation()->lockForUpdate()->firstOrFail();
+            app(OutletAccess::class)->assertCanAccess($request->user(), (int) $reservation->outlets_id);
+            $payment = $reservation->latestPayment()->lockForUpdate()->first();
 
             $oldValues = [
                 'cancellation_status' => $locked->status,
@@ -93,6 +111,16 @@ class CancellationApprovalController extends Controller
             $reservation->update([
                 'reservation_status' => 'cancelled',
             ]);
+
+            // 2b. Jika bukti masih menunggu verifikasi Finance, pindahkan ke status ditolak agar keluar dari antrean Finance
+            if ($payment && $payment->payment_status === 'pending_verification') {
+                $payment->update([
+                    'payment_status' => 'rejected',
+                    'users_id_verified_by' => $request->user()?->users_id,
+                    'verified_at' => now(),
+                    'rejection_reason' => 'Reservasi telah dibatalkan (pembatalan disetujui Manager).',
+                ]);
+            }
 
             // 3. Nonaktifkan QR Code tiket jika ada
             $qrToken = $reservation->qrToken()->first();
@@ -137,6 +165,8 @@ class CancellationApprovalController extends Controller
                 ->firstOrFail();
 
             abort_unless($locked->status === 'pending', 409, 'Permintaan pembatalan ini sudah diproses sebelumnya.');
+            $reservation = $locked->reservation()->firstOrFail();
+            app(OutletAccess::class)->assertCanAccess($request->user(), (int) $reservation->outlets_id);
 
             $oldStatus = $locked->status;
 

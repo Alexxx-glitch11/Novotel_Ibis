@@ -20,22 +20,30 @@
             <h1 class="text-3xl font-bold tracking-tight text-[#14123f]">{{ __('manager.dash_title') }}</h1>
             <p class="mt-1 text-sm text-slate-500">{{ __('manager.dash_sub') }}</p>
         </div>
-        <form method="GET" action="{{ route('manager.dashboard') }}">
-            <select name="outlet" aria-label="{{ __('manager.filter_outlet') }}" onchange="this.form.submit()"
-                    class="cursor-pointer rounded-lg border-0 bg-transparent py-2 pr-2 text-sm font-semibold text-[#14123f] focus:ring-2 focus:ring-[#1f1d5c]/20 focus:outline-none">
-                <option value="">{{ __('manager.all_outlets') }}</option>
-                @foreach ($outlets as $o)
-                    <option value="{{ $o->outlets_id }}" @selected($selected && $selected->outlets_id === $o->outlets_id)>{{ $o->name }}{{ $o->is_active ? '' : ' ' . __('manager.inactive_tag') }}</option>
-                @endforeach
-            </select>
-        </form>
+        @if ($outlets->count() > 1)
+            <form method="GET" action="{{ route('manager.dashboard') }}">
+                <select name="outlet" aria-label="{{ __('manager.filter_outlet') }}" onchange="this.form.submit()"
+                        class="cursor-pointer rounded-lg border-0 bg-transparent py-2 pr-2 text-sm font-semibold text-[#14123f] focus:ring-2 focus:ring-[#1f1d5c]/20 focus:outline-none">
+                    <option value="">{{ __('manager.all_outlets') }}</option>
+                    @foreach ($outlets as $o)
+                        <option value="{{ $o->outlets_id }}" @selected($selected && $selected->outlets_id === $o->outlets_id)>{{ $o->name }}</option>
+                    @endforeach
+                </select>
+            </form>
+        @elseif ($selected)
+            <span class="rounded-lg bg-white px-3.5 py-2 text-xs font-semibold text-[#14123f] ring-1 ring-slate-200">{{ $selected->name }}</span>
+        @endif
     </div>
+
+    @if (!auth()->user()->hasRole('admin') && !app(\App\Services\OutletAccess::class)->outletIds(auth()->user()))
+        <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status">Akun berhasil masuk, tetapi belum ditetapkan ke outlet. Minta Admin menetapkan outlet pada menu Pengguna agar data operasional dapat diakses.</div>
+    @endif
 
     {{-- Kartu ringkasan --}}
     <div class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         @foreach ($stats as $s)
             <div class="flex items-start gap-4 rounded-2xl bg-white p-5 ring-1 ring-slate-200">
-                <span class="grid size-10 shrink-0 place-items-center rounded-xl text-sm font-bold {{ $tones[$s['tone']] }}">{{ $s['letter'] }}</span>
+                <span translate="no" class="grid size-10 shrink-0 place-items-center rounded-xl text-sm font-bold {{ $tones[$s['tone']] }}">{{ $s['letter'] }}</span>
                 <div class="min-w-0">
                     <p class="text-sm text-slate-500">{{ $s['label'] }}</p>
                     <p class="mt-1 text-3xl font-bold tracking-tight text-[#14123f]">{{ $s['value'] }}</p>
@@ -71,7 +79,7 @@
                                     <td class="py-4 pr-3 text-slate-500">{{ $c['slot'] }}</td>
                                     <td class="py-4 pr-3 text-slate-500">{{ $c['reason'] }}</td>
                                     <td class="py-4 text-right">
-                                        <a href="#" class="inline-block rounded-lg bg-indigo-50 px-4 py-2 text-xs font-semibold text-[#1f1d5c] transition hover:bg-indigo-100">{{ __('manager.review') }}</a>
+                                        <a href="{{ route('manager.cancellations.index', array_filter(['selected' => $c['id'], 'outlet' => $selected?->outlets_id])) }}" class="inline-block rounded-lg bg-indigo-50 px-4 py-2 text-xs font-semibold text-[#1f1d5c] transition hover:bg-indigo-100">{{ __('manager.review') }}</a>
                                     </td>
                                 </tr>
                             @empty
@@ -114,7 +122,7 @@
             <section class="rounded-2xl bg-white p-5 ring-1 ring-slate-200 md:p-6">
                 <div class="flex items-start justify-between gap-3">
                     <h2 class="text-lg font-bold">{{ __('manager.rates_title') }}</h2>
-                    <a href="#" class="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-[#14123f] transition hover:bg-slate-200">{{ __('manager.edit_rates') }}</a>
+                    <a href="{{ route('manager.tax-service.index', array_filter(['outlet' => $selected?->outlets_id])) }}" class="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-[#14123f] transition hover:bg-slate-200">{{ __('manager.edit_rates') }}</a>
                 </div>
                 <p class="mt-1 text-xs text-slate-400">{{ __('manager.rates_note') }}</p>
 

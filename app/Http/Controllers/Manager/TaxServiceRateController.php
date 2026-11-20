@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Outlet;
 use App\Models\TaxServiceRate;
+use App\Services\OutletAccess;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,7 +17,9 @@ class TaxServiceRateController extends Controller
 {
     public function index(Request $request): View
     {
-        $outlets = Outlet::where('is_active', true)->orderBy('name')->get();
+        $outletQuery = Outlet::where('is_active', true)->ordered();
+        app(OutletAccess::class)->scope($outletQuery, $request->user());
+        $outlets = $outletQuery->get();
         $outletFilter = $request->query('outlet', 'all');
 
         $displayOutlets = $outlets;
@@ -27,17 +30,14 @@ class TaxServiceRateController extends Controller
         // Ambil rate aktif / terbaru per outlet
         $outletRates = [];
         foreach ($outlets as $outlet) {
-            $currentRate = TaxServiceRate::where('outlets_id', $outlet->outlets_id)
-                ->orderByDesc('effective_from')
-                ->first();
-
-            $outletRates[$outlet->outlets_id] = $currentRate;
+            $outletRates[$outlet->outlets_id] = TaxServiceRate::latestFor((int) $outlet->outlets_id);
         }
 
         // Ambil riwayat audit log perubahan tarif
         $historyQuery = AuditLog::with('user')
             ->whereIn('action', ['tax_updated', 'service_updated', 'rates_updated'])
             ->latest('created_at');
+        app(OutletAccess::class)->scopeAudit($historyQuery, $request->user());
 
         $history = $historyQuery->take(15)->get();
 
@@ -52,6 +52,7 @@ class TaxServiceRateController extends Controller
 
     public function update(Request $request, Outlet $outlet): RedirectResponse
     {
+        app(OutletAccess::class)->assertCanAccess($request->user(), (int) $outlet->outlets_id);
         $validated = $request->validate([
             'tax_rate' => ['required', 'numeric', 'min:0', 'max:100'],
             'service_rate' => ['required', 'numeric', 'min:0', 'max:100'],
@@ -65,12 +66,21 @@ class TaxServiceRateController extends Controller
             'effective_from.date' => 'Format tanggal tidak valid.',
         ]);
 
-        DB::transaction(function () use ($request, $outlet, $validated): void {
-            $effectiveDate = Carbon::parse($validated['effective_from'])->toDateString();
+        $effectiveDate = Carbon::parse($validated['effective_from'])->toDateString();
+        $latest = TaxServiceRate::latestFor((int) $outlet->outlets_id);
+        if ($latest && $effectiveDate < $latest->effective_from->toDateString()) {
+            return back()->withInput()->withErrors([
+                'effective_from' => 'Tanggal berlaku tidak boleh lebih awal dari tarif saat ini ('
+                    . $latest->effective_from->format('d/m/Y') . ').',
+            ]);
+        }
 
-            // Ambil tarif aktif sebelumnya
+        DB::transaction(function () use ($request, $outlet, $validated, $effectiveDate): void {
+            // Tarif terbaru sebelum perubahan ini (dikunci agar tidak bentrok)
             $oldRate = TaxServiceRate::where('outlets_id', $outlet->outlets_id)
                 ->orderByDesc('effective_from')
+                ->orderByDesc('tax_service_rates_id')
+                ->lockForUpdate()
                 ->first();
 
             $oldTax = $oldRate ? (float) $oldRate->tax_rate : null;
@@ -79,22 +89,39 @@ class TaxServiceRateController extends Controller
             $newTax = (float) $validated['tax_rate'];
             $newService = (float) $validated['service_rate'];
 
-            // Jika ada rate lama, perbarui batas akhir berlaku (effective_until)
-            if ($oldRate && $effectiveDate > $oldRate->effective_from->toDateString()) {
+            if ($oldRate && $effectiveDate === $oldRate->effective_from->toDateString()) {
+                // Tanggal berlaku sama: perbarui baris terbaru dan tutup baris lama lain agar tidak ada tarif ganda
                 $oldRate->update([
-                    'effective_until' => Carbon::parse($effectiveDate)->subDay()->toDateString(),
+                    'tax_rate' => $newTax,
+                    'service_rate' => $newService,
+                    'effective_until' => null,
+                    'users_id_updated_by' => $request->user()?->users_id,
+                ]);
+                TaxServiceRate::where('outlets_id', $outlet->outlets_id)
+                    ->where('tax_service_rates_id', '<>', $oldRate->tax_service_rates_id)
+                    ->whereNull('effective_until')
+                    ->update([
+                        'effective_until' => Carbon::parse($effectiveDate)->subDay()->toDateString(),
+                    ]);
+                $newRateRecord = $oldRate;
+            } else {
+                // Tanggal berlaku lebih baru: tutup semua tarif terbuka sebelumnya, lalu simpan tarif baru
+                TaxServiceRate::where('outlets_id', $outlet->outlets_id)
+                    ->whereNull('effective_until')
+                    ->whereDate('effective_from', '<', $effectiveDate)
+                    ->update([
+                        'effective_until' => Carbon::parse($effectiveDate)->subDay()->toDateString(),
+                    ]);
+
+                $newRateRecord = TaxServiceRate::create([
+                    'outlets_id' => $outlet->outlets_id,
+                    'tax_rate' => $newTax,
+                    'service_rate' => $newService,
+                    'effective_from' => $effectiveDate,
+                    'effective_until' => null,
+                    'users_id_updated_by' => $request->user()?->users_id,
                 ]);
             }
-
-            // Simpan tarif baru
-            $newRateRecord = TaxServiceRate::create([
-                'outlets_id' => $outlet->outlets_id,
-                'tax_rate' => $newTax,
-                'service_rate' => $newService,
-                'effective_from' => $effectiveDate,
-                'effective_until' => null,
-                'users_id_updated_by' => $request->user()?->users_id,
-            ]);
 
             $userName = $request->user()?->email ?? ($request->user()?->name ?? 'manager@' . strtolower($outlet->code ?? 'hotel'));
 

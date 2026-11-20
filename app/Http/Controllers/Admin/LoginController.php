@@ -16,7 +16,12 @@ class LoginController extends Controller
             return redirect()->route('admin.dashboard');
         }
 
-        return view('admin.login');
+        return view('auth.portal-login', [
+            'portal' => 'admin',
+            'title' => 'Masuk Admin',
+            'subtitle' => 'Masuk dengan akun internal ber-role Admin.',
+            'action' => route('admin.login.store'),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -42,5 +47,14 @@ class LoginController extends Controller
         $request->session()->regenerate();
 
         return redirect()->intended(route('admin.dashboard'));
+    }
+
+    public function destroy(Request $request): RedirectResponse
+    {
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect()->route('admin.login');
     }
 }

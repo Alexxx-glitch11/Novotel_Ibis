@@ -49,9 +49,15 @@
                 {{-- Header Kartu: Nama Outlet & Badge --}}
                 <div class="flex items-center justify-between">
                     <h2 class="text-lg font-bold text-slate-900">{{ $outletDisplayName }}</h2>
-                    <span class="rounded-full bg-[#fef3e2] px-3 py-1 text-[11px] font-medium text-[#c28422]">
-                        Perlu validasi
-                    </span>
+                    @if ($rate)
+                        <span class="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700">
+                            Aktif
+                        </span>
+                    @else
+                        <span class="rounded-full bg-[#fef3e2] px-3 py-1 text-[11px] font-medium text-[#c28422]">
+                            Belum diatur
+                        </span>
+                    @endif
                 </div>
 
                 <form method="POST" action="{{ route('manager.tax-service.update', $outlet) }}" class="mt-5 space-y-4">
@@ -79,7 +85,8 @@
                         <div>
                             <label class="block text-xs font-medium text-slate-600">Berlaku mulai</label>
                             <input type="date" name="effective_from"
-                                   value="{{ old('effective_from', $rate ? $rate->effective_from?->toDateString() : now()->toDateString()) }}"
+                                   value="{{ old('effective_from', max(now('Asia/Jakarta')->toDateString(), $rate?->effective_from?->toDateString() ?? '')) }}"
+                                   min="{{ $rate?->effective_from?->toDateString() }}"
                                    required
                                    class="mt-1.5 w-full rounded-xl border border-slate-200 bg-[#fbfcfe] px-3.5 py-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400">
                         </div>
@@ -129,7 +136,7 @@
                         @endphp
                         <tr class="hover:bg-slate-50/50 transition">
                             <td class="py-3.5 pr-4 text-slate-800 font-medium">
-                                {{ $log->created_at->locale('id')->translatedFormat('d M Y') }}
+                                {{ $log->created_at->locale(app()->getLocale())->translatedFormat('d M Y') }}
                             </td>
                             <td class="py-3.5 px-4 text-slate-600">
                                 {{ $cleanOutlet }}

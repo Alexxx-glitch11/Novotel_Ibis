@@ -17,6 +17,53 @@ class ReservationQrCode
 
     public function svg(string $value): string
     {
+        $matrix = $this->buildMatrix($value);
+        $quietZone = 4;
+        $viewSize = self::SIZE + ($quietZone * 2);
+        $path = '';
+        for ($y = 0; $y < self::SIZE; $y++) {
+            for ($x = 0; $x < self::SIZE; $x++) {
+                if ($matrix[$y][$x]) {
+                    $path .= 'M' . ($x + $quietZone) . ' ' . ($y + $quietZone) . 'h1v1h-1z';
+                }
+            }
+        }
+
+        return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' . $viewSize . ' ' . $viewSize . '" width="246" height="246" shape-rendering="crispEdges" role="img" aria-label="QR reservasi"><rect width="100%" height="100%" fill="#fff"/><path d="' . $path . '" fill="#111827"/></svg>';
+    }
+
+    public function png(string $value, int $scale = 12): string
+    {
+        $matrix = $this->buildMatrix($value);
+        $quietZone = 4;
+        $modules = self::SIZE + ($quietZone * 2);
+        $imgSize = $modules * $scale;
+
+        $im = imagecreatetruecolor($imgSize, $imgSize);
+        $white = imagecolorallocate($im, 255, 255, 255);
+        $dark = imagecolorallocate($im, 17, 24, 39);
+        imagefill($im, 0, 0, $white);
+
+        for ($y = 0; $y < self::SIZE; $y++) {
+            for ($x = 0; $x < self::SIZE; $x++) {
+                if ($matrix[$y][$x]) {
+                    $px = ($x + $quietZone) * $scale;
+                    $py = ($y + $quietZone) * $scale;
+                    imagefilledrectangle($im, $px, $py, $px + $scale - 1, $py + $scale - 1, $dark);
+                }
+            }
+        }
+
+        ob_start();
+        imagepng($im);
+        $binary = (string) ob_get_clean();
+
+        return $binary;
+    }
+
+    /** @return array<int, array<int, int|null>> */
+    private function buildMatrix(string $value): array
+    {
         $bytes = array_values(unpack('C*', $value) ?: []);
         if ($bytes === [] || count($bytes) > 78) {
             throw new InvalidArgumentException('Reservation QR data must contain between 1 and 78 bytes.');
@@ -35,18 +82,7 @@ class ReservationQrCode
         $this->placeData($matrix, $function, $dataBits, 0);
         $this->drawFormatBits($matrix, $function, 0);
 
-        $quietZone = 4;
-        $viewSize = self::SIZE + ($quietZone * 2);
-        $path = '';
-        for ($y = 0; $y < self::SIZE; $y++) {
-            for ($x = 0; $x < self::SIZE; $x++) {
-                if ($matrix[$y][$x]) {
-                    $path .= 'M' . ($x + $quietZone) . ' ' . ($y + $quietZone) . 'h1v1h-1z';
-                }
-            }
-        }
-
-        return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' . $viewSize . ' ' . $viewSize . '" width="246" height="246" shape-rendering="crispEdges" role="img" aria-label="QR reservasi"><rect width="100%" height="100%" fill="#fff"/><path d="' . $path . '" fill="#111827"/></svg>';
+        return $matrix;
     }
 
     public function dataUri(string $value): string
@@ -211,7 +247,7 @@ class ReservationQrCode
             $this->setFunctionModule($matrix, $function, self::SIZE - 1 - $i, 8, $bit($i));
         }
         for ($i = 8; $i < 15; $i++) {
-            $this->setFunctionModule($matrix, $function, 14 - $i, 8, $bit($i));
+            $this->setFunctionModule($matrix, $function, 8, self::SIZE - 15 + $i, $bit($i));
         }
         $this->setFunctionModule($matrix, $function, 8, self::SIZE - 8, true);
     }

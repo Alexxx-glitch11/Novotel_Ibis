@@ -121,10 +121,12 @@
 
         @forelse ($active as $r)
             @php
-                $latest    = $r->cancellationRequests->first();
-                $isPending = $latest?->status === 'pending';
-                $canQr     = in_array($r->reservation_status, ['confirmed', 'partially_arrived', 'checked_in'], true);
-                $detailUrl = route('reservasi.confirmation', [$r->outlet->code, $r->reservation_code]);
+                $latest      = $r->cancellationRequests->first();
+                $isPending   = $latest?->status === 'pending';
+                $latestPay   = $r->latestPayment;
+                $payRejected = $latestPay?->payment_status === 'rejected';
+                $canQr       = in_array($r->reservation_status, ['confirmed', 'partially_arrived', 'checked_in'], true);
+                $detailUrl   = route('reservasi.confirmation', [$r->outlet->code, $r->reservation_code]);
             @endphp
 
             <article class="mt-4 rounded-2xl bg-white p-5 ring-1 ring-slate-200 md:p-6">
@@ -135,6 +137,11 @@
                     </div>
                     <div class="flex flex-wrap gap-2">
                         @include('guest._badge', ['status' => $r->reservation_status])
+                        @if ($payRejected)
+                            <span class="inline-flex items-center rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 ring-1 ring-red-200">
+                                {{ app()->getLocale() === 'en' ? 'Proof Rejected — Re-upload Needed' : 'Bukti Ditolak — Perlu Unggah Ulang' }}
+                            </span>
+                        @endif
                         @if ($isPending)
                             @include('guest._badge', ['status' => 'pending_review'])
                         @endif
@@ -177,6 +184,15 @@
                         @endif
                     </div>
                 </div>
+
+                @if ($payRejected)
+                    <div class="mt-4 rounded-xl bg-red-50 px-4 py-3 text-xs text-red-800 ring-1 ring-red-200" role="alert">
+                        <p class="font-semibold">
+                            {{ app()->getLocale() === 'en' ? 'Payment proof rejected by Finance' : 'Bukti pembayaran ditolak oleh Finance' }}@if ($latestPay?->rejection_reason): {{ $latestPay->rejection_reason }}@endif
+                        </p>
+                        <p class="mt-1">{{ app()->getLocale() === 'en' ? 'Click "' . __('history.btn_pay') . '" to re-upload a valid transfer receipt.' : 'Klik "' . __('history.btn_pay') . '" untuk mengunggah ulang bukti transfer yang valid.' }}</p>
+                    </div>
+                @endif
 
                 @if ($isPending)
                     <p class="mt-4 text-xs text-slate-500">{{ __('history.pending_note') }}</p>

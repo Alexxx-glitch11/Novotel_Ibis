@@ -4,23 +4,29 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 
 class EnsureAdmin
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if (! $request->user()) {
-            return redirect()->guest(route('admin.login'));
+        $guard = Auth::guard('admin');
+        if (! $guard->check()) {
+            return redirect()->guest(route('login'));
         }
 
-        abort_unless($request->user()->is_active && $request->user()->hasRole('admin'), 403);
+        Auth::shouldUse('admin');
+        $user = $guard->user();
+        abort_unless($user && $user->is_active && $user->hasRole('admin'), 403);
 
         $routeName = (string) $request->route()?->getName();
         $permission = match (true) {
             $routeName === 'admin.dashboard' => 'admin.dashboard.view',
+            $routeName === 'admin.live-status' => 'admin.dashboard.view',
+            in_array($routeName, ['admin.reservations.index', 'admin.reservations.show'], true) => 'admin.reservations.view',
             $routeName === 'admin.outlets.index' => 'admin.outlets.view',
-            in_array($routeName, ['admin.outlets.store', 'admin.areas.store'], true) => 'admin.outlets.manage',
+            in_array($routeName, ['admin.outlets.store', 'admin.outlets.toggle', 'admin.areas.store'], true) => 'admin.outlets.manage',
             $routeName === 'admin.tables.index' => 'admin.tables.view',
             str_starts_with($routeName, 'admin.tables.') => 'admin.tables.manage',
             $routeName === 'admin.menu.index' => 'admin.menu.view',

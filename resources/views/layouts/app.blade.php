@@ -4,14 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>@yield('title', __('ui.site_title'))</title>
+    <link rel="icon" type="image/png" href="{{ asset('images/dinea-favicon.png') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <style>
+        html { font-size: 16.5px; }
+        body { font-size: 0.95rem; line-height: 1.5; }
+    </style>
     @stack('styles')
 </head>
-<body class="bg-page font-sans text-neutral-900 antialiased">
-        <header class="sticky top-0 z-50 h-20 bg-page">
+<body class="bg-white font-sans text-neutral-900 antialiased" style="background:#ffffff;">
+        <header class="sticky top-0 z-50 h-20 bg-white" style="background:#ffffff;">
         <div class="flex h-full w-full items-center justify-between px-3 md:px-6">
             <a href="{{ route('home') }}" class="flex shrink-0 items-center gap-3 md:gap-4">
                 <img src="{{ asset('images/NovoLogo.png') }}" alt="Novotel Hotels & Resorts" class="block h-6 w-auto shrink-0 md:h-11">
@@ -28,7 +33,7 @@
             </button>
 
             <nav id="main-nav" aria-label="Navigasi utama"
-                 class="absolute inset-x-0 top-20 hidden flex-col gap-1 border-t border-black/5 bg-page px-4 pt-2 pb-5 text-base text-[#555] shadow-md
+                 class="absolute inset-x-0 top-20 hidden flex-col gap-1 border-t border-black/5 bg-white px-4 pt-2 pb-5 text-base text-[#555] shadow-md
                         md:static md:flex md:flex-row md:items-center md:gap-10 md:border-0 md:bg-transparent md:p-0 md:text-[1.05rem] md:shadow-none">
                  @php
                     $navLinks = [
@@ -48,7 +53,7 @@
                     </a>
                 @endforeach
 
-                <div class="relative mt-2 md:mt-0" id="lang-switcher">
+                <div class="relative mt-2 md:mt-0" id="lang-switcher" translate="no">
     <button type="button" id="lang-toggle" aria-haspopup="true" aria-expanded="false" aria-label="{{ __('ui.language') }}"
             class="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-neutral-800 hover:bg-black/5">
         @include('partials.flag', ['code' => $locale])

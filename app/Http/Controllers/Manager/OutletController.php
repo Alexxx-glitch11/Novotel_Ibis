@@ -7,15 +7,18 @@ use App\Models\Outlet;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Services\OutletAccess;
 
 class OutletController extends Controller
 {
     // Reservasi yang masih berjalan (dihitung sebagai "mendatang" bila tanggalnya belum lewat)
     private const LIVE = ['pending_payment', 'confirmed', 'partially_arrived', 'checked_in'];
 
-    public function index()
+    public function index(Request $request, OutletAccess $outletAccess)
     {
-        $outlets = Outlet::ordered()
+        $query = Outlet::ordered();
+        $outletAccess->scope($query, $request->user());
+        $outlets = $query
             ->withCount([
                 'tables',
                 'reservations as upcoming_count' => fn ($q) => $q
@@ -29,6 +32,7 @@ class OutletController extends Controller
 
     public function toggle(Request $request, Outlet $outlet): RedirectResponse
     {
+        app(OutletAccess::class)->assertCanAccess($request->user(), (int) $outlet->outlets_id);
         $request->validate(['is_active' => ['required', 'boolean']]);
 
         $new = $request->boolean('is_active');

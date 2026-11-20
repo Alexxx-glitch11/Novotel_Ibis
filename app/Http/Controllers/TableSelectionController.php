@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Outlet;
 use App\Models\AuditLog;
 use App\Models\MenuItem;
+use App\Models\OutletContent;
 use App\Models\Payment;
 use App\Models\Reservation;
 use App\Models\ReservationItem;
@@ -13,9 +14,11 @@ use App\Models\ReservationHold;
 use App\Models\Table;
 use App\Services\ReservationAvailability;
 use App\Services\ReservationQrCode;
+use App\Services\ReservationSettings;
 use Carbon\Carbon;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -26,8 +29,10 @@ use Illuminate\Support\Str;
 
 class TableSelectionController extends Controller
 {
-    public function __construct(private readonly ReservationAvailability $availability)
-    {
+    public function __construct(
+        private readonly ReservationAvailability $availability,
+        private readonly ReservationSettings $settings,
+    ) {
     }
 
     public function show(Request $request, string $outlet): View|RedirectResponse
@@ -35,6 +40,63 @@ class TableSelectionController extends Controller
         $outlet = $this->findOutlet($outlet);
         $areas = $outlet->areas()->where('is_active', true)->orderBy('name')->get();
         $flow = $request->session()->get($this->flowKey($outlet->code), []);
+        if ($request->filled('event_id') && is_numeric($request->query('event_id'))) {
+            $preselectedEvent = OutletContent::query()
+                ->where('outlets_id', $outlet->outlets_id)
+                ->where('content_type', 'event')
+                ->publishedOn()
+                ->find((int) $request->query('event_id'));
+
+            if ($preselectedEvent) {
+                if (in_array($flow['step'] ?? null, ['menu', 'review'], true)) {
+                    $this->releaseCurrentHold($request, $outlet, $flow);
+                    unset($flow['hold_id']);
+                }
+                if (! empty($flow['reservation_date'])) {
+                    $date = $flow['reservation_date'];
+                    if (($preselectedEvent->starts_on && $preselectedEvent->starts_on->toDateString() > $date)
+                        || ($preselectedEvent->ends_on && $preselectedEvent->ends_on->toDateString() < $date)) {
+                        unset($flow['reservation_date'], $flow['start_time'], $flow['end_time']);
+                    }
+                }
+                $flow['event_id'] = $preselectedEvent->outlet_contents_id;
+                unset($flow['promo_id'], $flow['promo_title'], $flow['promo_menu_item_id']);
+                $flow['step'] = 'details';
+                $request->session()->put($this->flowKey($outlet->code), $flow);
+            }
+        } elseif ($request->filled('promo_id') && is_numeric($request->query('promo_id'))) {
+            $preselectedPromo = OutletContent::query()
+                ->where('outlets_id', $outlet->outlets_id)
+                ->where('content_type', 'promotion')
+                ->publishedOn()
+                ->find((int) $request->query('promo_id'));
+
+            if ($preselectedPromo) {
+                if (in_array($flow['step'] ?? null, ['menu', 'review'], true)) {
+                    $this->releaseCurrentHold($request, $outlet, $flow);
+                    unset($flow['hold_id']);
+                }
+                $preselectedPromo->syncPromotionMenuItem();
+                $preselectedPromo->refresh();
+                unset($flow['event_id'], $flow['event_title'], $flow['requires_table'], $flow['requires_menu'], $flow['price_per_pax']);
+                $flow['promo_id'] = $preselectedPromo->outlet_contents_id;
+                $flow['promo_title'] = $preselectedPromo->title;
+                $flow['promo_menu_item_id'] = $preselectedPromo->menu_items_id;
+                if ($preselectedPromo->menu_items_id) {
+                    $flow['menu_items'] = [(int) $preselectedPromo->menu_items_id => 1];
+                }
+                $flow['step'] = 'details';
+                $request->session()->put($this->flowKey($outlet->code), $flow);
+            }
+        } elseif (! $request->has('step') && ! $request->session()->has('errors')) {
+            if (in_array($flow['step'] ?? null, ['menu', 'review'], true)) {
+                $this->releaseCurrentHold($request, $outlet, $flow);
+                unset($flow['hold_id']);
+            }
+            unset($flow['event_id'], $flow['event_title'], $flow['requires_table'], $flow['requires_menu'], $flow['price_per_pax'], $flow['promo_id'], $flow['promo_title'], $flow['promo_menu_item_id']);
+            $flow['step'] = 'details';
+            $request->session()->put($this->flowKey($outlet->code), $flow);
+        }
         if ($request->query('step') === 'tables' && in_array($flow['step'] ?? null, ['menu', 'review'], true)) {
             $this->releaseCurrentHold($request, $outlet, $flow);
             unset($flow['hold_id']);
@@ -72,8 +134,7 @@ class TableSelectionController extends Controller
                     )->modelKeys();
                     $availableIds = array_map('intval', $availableIds);
                 } else {
-                    $availableIds = $tables->filter(fn (Table $table) => $table->is_active)->modelKeys();
-                    $availableIds = array_map('intval', $availableIds);
+                    $availableIds = [];
                 }
                 $tables->each(fn (Table $table) => $table->setAttribute(
                     'available_for_slot',
@@ -113,53 +174,57 @@ class TableSelectionController extends Controller
                 ->get();
         }
 
+        $activeEvents = OutletContent::query()
+            ->where('outlets_id', $outlet->outlets_id)
+            ->where('content_type', 'event')
+            ->publishedOn($flow['reservation_date'] ?? null)
+            ->orderBy('title')
+            ->get();
+        $selectedEvent = ! empty($flow['event_id']) ? OutletContent::find($flow['event_id']) : null;
+
         if ($step === 'menu') {
-            return view('reservasi.menu', compact('outlet', 'flow', 'hold', 'selectedTable', 'menuItems', 'selectedMenuItems'));
+            return view('reservasi.menu', compact('outlet', 'flow', 'hold', 'selectedTable', 'menuItems', 'selectedMenuItems', 'activeEvents', 'selectedEvent'));
         }
         if ($step === 'review') {
-            return view('reservasi.review', compact('outlet', 'flow', 'hold', 'selectedTable', 'menuItems', 'selectedMenuItems'));
+            return view('reservasi.review', compact('outlet', 'flow', 'hold', 'selectedTable', 'menuItems', 'selectedMenuItems', 'activeEvents', 'selectedEvent'));
         }
 
-        return view('reservasi.pilih-meja', compact('outlet', 'areas', 'flow', 'step', 'tablesByArea', 'hold', 'selectedTable'));
+        return view('reservasi.pilih-meja', compact('outlet', 'areas', 'flow', 'step', 'tablesByArea', 'hold', 'selectedTable', 'activeEvents', 'selectedEvent'));
     }
 
-    public function findTables(Request $request, string $outlet): RedirectResponse
+    public function availableTables(Request $request, string $outlet): JsonResponse
     {
         $outlet = $this->findOutlet($outlet);
         $today = Carbon::now(config('reservation.timezone'))->toDateString();
-
+        $maxGuests = $this->settings->maxGuests();
         $data = $request->validate([
-            'customer_name' => ['required', 'string', 'max:100'],
-            'customer_phone' => ['required', 'string', 'max:20', 'regex:/^[0-9+().\-\s]{8,20}$/'],
-            'customer_email' => ['required', 'email', 'max:100'],
-            'guest_count' => ['required', 'integer', 'min:1', 'max:50'],
+            'guest_count' => ['required', 'integer', 'min:1', 'max:' . $maxGuests],
             'reservation_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:' . $today],
             'start_time' => ['required', 'date_format:H:i'],
-            'notes' => ['nullable', 'string', 'max:1000'],
         ]);
-
         $timezone = config('reservation.timezone');
         $start = Carbon::createFromFormat('Y-m-d H:i', $data['reservation_date'] . ' ' . $data['start_time'], $timezone);
         if ($start->lessThanOrEqualTo(Carbon::now($timezone))) {
             throw ValidationException::withMessages(['start_time' => __('ui.time_must_be_future')]);
         }
 
-        $end = $start->copy()->addMinutes((int) config('reservation.duration_minutes', 120));
+        $end = $start->copy()->addMinutes($this->settings->durationMinutes());
         if (! $end->isSameDay($start)) {
             throw ValidationException::withMessages(['start_time' => __('ui.reservation_must_end_same_day')]);
         }
 
-        $data['outlets_id'] = $outlet->outlets_id;
-        $data['end_time'] = $end->format('H:i:s');
-        $data['start_time'] = $start->format('H:i:s');
-        $data['reservation_date'] = $start->toDateString();
-        $data['guest_count'] = (int) $data['guest_count'];
-        $data['step'] = 'tables';
+        $tableIds = $outlet->areas()->where('is_active', true)->get()->flatMap(fn ($area) =>
+            $this->availability->availableTables(
+                $outlet->outlets_id,
+                $area->areas_id,
+                $start->toDateString(),
+                $start->format('H:i:s'),
+                $end->format('H:i:s'),
+                (int) $data['guest_count'],
+            )->modelKeys()
+        )->map(fn ($id) => (int) $id)->values();
 
-        $this->releaseCurrentHold($request, $outlet, $request->session()->get($this->flowKey($outlet->code), []));
-        $request->session()->put($this->flowKey($outlet->code), $data);
-
-        return redirect()->route('reservasi.outlet', ['outlet' => $outlet->code]);
+        return response()->json(['table_ids' => $tableIds]);
     }
 
     public function holdTable(Request $request, string $outlet): RedirectResponse
@@ -167,30 +232,57 @@ class TableSelectionController extends Controller
         $outlet = $this->findOutlet($outlet);
         $flowKey = $this->flowKey($outlet->code);
         $today = Carbon::now(config('reservation.timezone'))->toDateString();
+        $prelim = $request->validate([
+            'event_id' => ['nullable', 'integer'],
+        ]);
+        $event = ! empty($prelim['event_id'])
+            ? OutletContent::query()
+                ->where('outlets_id', $outlet->outlets_id)
+                ->where('content_type', 'event')
+                ->where('status', 'published')
+                ->find((int) $prelim['event_id'])
+            : null;
+        if (! empty($prelim['event_id']) && ! $event) {
+            throw ValidationException::withMessages(['event_id' => 'Event yang dipilih tidak tersedia di outlet ini.']);
+        }
+
+        $requiresTable = $event ? (bool) $event->requires_table : true;
+        $requiresMenu = $event ? (bool) $event->requires_menu : true;
+        $maxGuests = $this->settings->maxGuests();
+
         $data = $request->validate([
             'customer_name' => ['required', 'string', 'max:100'],
             'customer_phone' => ['required', 'string', 'max:20', 'regex:/^[0-9+().\\-\\s]{8,20}$/'],
             'customer_email' => ['required', 'email', 'max:100'],
-            'adult_count' => ['required', 'integer', 'min:1', 'max:50'],
-            'children_count' => ['required', 'integer', 'min:0', 'max:50'],
+            'adult_count' => ['required', 'integer', 'min:1', 'max:' . $maxGuests],
+            'children_count' => ['required', 'integer', 'min:0', 'max:' . $maxGuests],
             'reservation_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:' . $today],
             'start_time' => ['required', 'date_format:H:i'],
-            'tables_id' => ['required', 'integer'],
+            'tables_id' => [$requiresTable ? 'required' : 'nullable', 'integer'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
+        if ($event) {
+            $eventDate = $data['reservation_date'];
+            if (($event->starts_on && $event->starts_on->toDateString() > $eventDate)
+                || ($event->ends_on && $event->ends_on->toDateString() < $eventDate)) {
+                throw ValidationException::withMessages(['event_id' => 'Tanggal reservasi berada di luar periode berlangsungnya event ini.']);
+            }
+        }
         $data['guest_count'] = (int) $data['adult_count'] + (int) $data['children_count'];
-        if ($data['guest_count'] > 50) {
-            throw ValidationException::withMessages(['children_count' => __('ui.max_guest_count')]);
+        if ($data['guest_count'] > $maxGuests) {
+            throw ValidationException::withMessages(['children_count' => 'Maksimal ' . $maxGuests . ' orang per satu reservasi rombongan.']);
         }
         $timezone = config('reservation.timezone');
         $start = Carbon::createFromFormat('Y-m-d H:i', $data['reservation_date'] . ' ' . $data['start_time'], $timezone);
         if ($start->lessThanOrEqualTo(Carbon::now($timezone))) {
             throw ValidationException::withMessages(['start_time' => __('ui.time_must_be_future')]);
         }
-        $end = $start->copy()->addMinutes((int) config('reservation.duration_minutes', 120));
+        $end = $start->copy()->addMinutes($this->settings->durationMinutes());
         if (! $end->isSameDay($start)) {
             throw ValidationException::withMessages(['start_time' => __('ui.reservation_must_end_same_day')]);
         }
+        $existingFlow = $request->session()->get($flowKey, []);
+        $carryPromo = ! $event && ! empty($existingFlow['promo_id']);
         $flow = [
             'customer_name' => $data['customer_name'],
             'customer_phone' => $data['customer_phone'],
@@ -202,14 +294,27 @@ class TableSelectionController extends Controller
             'start_time' => $start->format('H:i:s'),
             'end_time' => $end->format('H:i:s'),
             'notes' => $data['notes'] ?? null,
+            'event_id' => $event?->outlet_contents_id,
+            'event_title' => $event?->title,
+            'promo_id' => $carryPromo ? $existingFlow['promo_id'] : null,
+            'promo_title' => $carryPromo ? ($existingFlow['promo_title'] ?? null) : null,
+            'promo_menu_item_id' => $carryPromo ? ($existingFlow['promo_menu_item_id'] ?? null) : null,
+            'requires_table' => $requiresTable,
+            'requires_menu' => $requiresMenu,
+            'price_per_pax' => (float) ($event?->price_per_pax ?? 0),
+            'menu_items' => $carryPromo
+                ? (! empty($existingFlow['menu_items'])
+                    ? $existingFlow['menu_items']
+                    : (! empty($existingFlow['promo_menu_item_id']) ? [(int) $existingFlow['promo_menu_item_id'] => 1] : []))
+                : [],
             'step' => 'details',
         ];
         $sessionHash = $this->sessionHash($request);
         $lock = Cache::lock('reservation-hold-session:' . $sessionHash, 10);
 
         try {
-            $hold = $lock->block(5, function () use ($data, $flow, $outlet, $sessionHash): ReservationHold {
-                return DB::transaction(function () use ($data, $flow, $outlet, $sessionHash): ReservationHold {
+            $hold = $lock->block(5, function () use ($data, $flow, $outlet, $sessionHash, $requiresTable): ReservationHold {
+                return DB::transaction(function () use ($data, $flow, $outlet, $sessionHash, $requiresTable): ReservationHold {
                     $active = ReservationHold::where('session_token_hash', $sessionHash)
                         ->where('status', 'active')
                         ->where('expires_at', '>', now())
@@ -223,26 +328,29 @@ class TableSelectionController extends Controller
                         ->where('expires_at', '<=', now())
                         ->update(['status' => 'expired']);
 
-                    $table = Table::where('tables_id', (int) $data['tables_id'])
-                        ->where('outlets_id', $outlet->outlets_id)
-                        ->whereHas('area', fn ($query) => $query->where('outlets_id', $outlet->outlets_id)->where('is_active', true))
-                        ->where('is_active', true)
-                        ->lockForUpdate()
-                        ->first();
-                    if (! $table || (int) $table->capacity < (int) $flow['guest_count']) {
-                        throw ValidationException::withMessages(['tables_id' => __('ui.table_unavailable')]);
-                    }
+                    $table = null;
+                    if ($requiresTable) {
+                        $table = Table::where('tables_id', (int) $data['tables_id'])
+                            ->where('outlets_id', $outlet->outlets_id)
+                            ->whereHas('area', fn ($query) => $query->where('outlets_id', $outlet->outlets_id)->where('is_active', true))
+                            ->where('is_active', true)
+                            ->lockForUpdate()
+                            ->first();
+                        if (! $table || (int) $table->capacity < (int) $flow['guest_count']) {
+                            throw ValidationException::withMessages(['tables_id' => __('ui.table_unavailable')]);
+                        }
 
-                    $availableIds = $this->availability->availableTables(
-                        $outlet->outlets_id,
-                        $table->areas_id,
-                        $flow['reservation_date'],
-                        $flow['start_time'],
-                        $flow['end_time'],
-                        (int) $flow['guest_count'],
-                    )->modelKeys();
-                    if (! in_array((int) $table->tables_id, array_map('intval', $availableIds), true)) {
-                        throw ValidationException::withMessages(['tables_id' => __('ui.table_unavailable')]);
+                        $availableIds = $this->availability->availableTables(
+                            $outlet->outlets_id,
+                            $table->areas_id,
+                            $flow['reservation_date'],
+                            $flow['start_time'],
+                            $flow['end_time'],
+                            (int) $flow['guest_count'],
+                        )->modelKeys();
+                        if (! in_array((int) $table->tables_id, array_map('intval', $availableIds), true)) {
+                            throw ValidationException::withMessages(['tables_id' => __('ui.table_unavailable')]);
+                        }
                     }
 
                     $now = now();
@@ -253,10 +361,12 @@ class TableSelectionController extends Controller
                         'start_time' => $flow['start_time'],
                         'end_time' => $flow['end_time'],
                         'started_at' => $now,
-                        'expires_at' => $now->copy()->addMinutes((int) config('reservation.hold_minutes', 10)),
+                        'expires_at' => $now->copy()->addMinutes($this->settings->holdMinutes()),
                         'status' => 'active',
                     ]);
-                    $hold->tables()->attach($table->tables_id);
+                    if ($table) {
+                        $hold->tables()->attach($table->tables_id);
+                    }
 
                     return $hold;
                 });
@@ -265,12 +375,12 @@ class TableSelectionController extends Controller
             throw ValidationException::withMessages(['tables_id' => __('ui.active_hold_exists')]);
         }
 
-        $flow['step'] = 'menu';
+        $flow['step'] = $requiresMenu ? 'menu' : 'review';
         $flow['hold_id'] = $hold->reservation_holds_id;
-        $flow['tables_id'] = (int) $data['tables_id'];
+        $flow['tables_id'] = $requiresTable ? (int) $data['tables_id'] : null;
         $request->session()->put($flowKey, $flow);
 
-        return redirect()->route('reservasi.outlet', $outlet->code);
+        return redirect()->route('reservasi.outlet', ['outlet' => $outlet->code, 'step' => $flow['step']]);
     }
 
     public function saveMenu(Request $request, string $outlet): RedirectResponse
@@ -305,7 +415,7 @@ class TableSelectionController extends Controller
         $flow['step'] = 'review';
         $request->session()->put($flowKey, $flow);
 
-        return redirect()->route('reservasi.outlet', $outlet->code);
+        return redirect()->route('reservasi.outlet', ['outlet' => $outlet->code, 'step' => 'review']);
     }
 
     public function confirm(Request $request, string $outlet): RedirectResponse
@@ -318,19 +428,16 @@ class TableSelectionController extends Controller
                 ->withErrors(['reservation' => __('ui.hold_expired')]);
         }
 
-                $validated = $request->validate([
-            'payment_proof' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:5120'],
+        $validated = $request->validate([
             'notes' => ['nullable', 'string', 'max:1000'],
+            'payment_proof' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:5120'],
         ]);
-        $proofFile = $validated['payment_proof'];
 
         // Catatan dari halaman review dipakai; bila kolomnya tidak terkirim, pakai catatan dari langkah pertama.
         $notes = array_key_exists('notes', $validated)
             ? trim((string) $validated['notes'])
             : trim((string) ($flow['notes'] ?? ''));
         $notes = $notes === '' ? null : $notes;
-        $storedProofPath = null;
-
         $sessionHash = $this->sessionHash($request);
         $requestedItems = collect($flow['menu_items'] ?? [])->mapWithKeys(
             fn ($quantity, $id) => [(int) $id => (int) $quantity],
@@ -345,12 +452,12 @@ class TableSelectionController extends Controller
             $flow['step'] = 'menu';
             $request->session()->put($flowKey, $flow);
 
-            return redirect()->route('reservasi.outlet', $outlet->code)
+            return redirect()->route('reservasi.outlet', ['outlet' => $outlet->code, 'step' => 'menu'])
                 ->withErrors(['items' => __('ui.menu_item_unavailable')]);
         }
 
-        try {
-                        $reservation = DB::transaction(function () use ($flow, $outlet, $sessionHash, $requestedItems, $proofFile, $notes, &$storedProofPath): ?Reservation {
+        $requiresTable = (bool) ($flow['requires_table'] ?? true);
+        $reservation = DB::transaction(function () use ($flow, $outlet, $sessionHash, $requestedItems, $notes, $requiresTable): ?Reservation {
             $hold = ReservationHold::where('reservation_holds_id', $flow['hold_id'])
                 ->where('outlets_id', $outlet->outlets_id)
                 ->where('session_token_hash', $sessionHash)
@@ -364,10 +471,13 @@ class TableSelectionController extends Controller
                 return null;
             }
 
-            $table = $hold->tables()->lockForUpdate()->first();
-            if (! $table || (int) $table->capacity < (int) $flow['guest_count']) {
-                $hold->update(['status' => 'released']);
-                return null;
+            $table = null;
+            if ($requiresTable) {
+                $table = $hold->tables()->lockForUpdate()->first();
+                if (! $table || (int) $table->capacity < (int) $flow['guest_count']) {
+                    $hold->update(['status' => 'released']);
+                    return null;
+                }
             }
 
             $menuItems = MenuItem::query()
@@ -383,22 +493,21 @@ class TableSelectionController extends Controller
                 return null;
             }
 
-            $subtotal = round($requestedItems
+            $menuSubtotal = round($requestedItems
                 ->map(fn ($quantity, $id) => (float) $menuItems[$id]->price * $quantity)
                 ->sum(), 2);
-            $taxServiceRate = $outlet->taxServiceRates()
-                ->whereDate('effective_from', '<=', $flow['reservation_date'])
-                ->where(fn ($query) => $query->whereNull('effective_until')->orWhereDate('effective_until', '>=', $flow['reservation_date']))
-                ->orderByDesc('effective_from')
-                ->first();
+            $eventSubtotal = round(((float) ($flow['price_per_pax'] ?? 0)) * (int) $flow['guest_count'], 2);
+            $subtotal = round($menuSubtotal + $eventSubtotal, 2);
+            $taxServiceRate = \App\Models\TaxServiceRate::activeFor((int) $outlet->outlets_id, $flow['reservation_date']);
             $serviceRate = (float) ($taxServiceRate?->service_rate ?? 5);
             $taxRate = (float) ($taxServiceRate?->tax_rate ?? 10);
             $serviceAmount = round($subtotal * $serviceRate / 100, 2);
             $taxAmount = round(($subtotal + $serviceAmount) * $taxRate / 100, 2);
 
             $reservation = Reservation::create([
-                'reservation_code' => 'RRMS-' . Str::upper(Str::random(12)),
+                'reservation_code' => Reservation::generateCode($outlet, $flow['reservation_date']),
                 'outlets_id' => $outlet->outlets_id,
+                'outlet_contents_id' => $flow['event_id'] ?? null,
                 'customer_name' => $flow['customer_name'],
                 'customer_phone' => $flow['customer_phone'],
                 'customer_email' => $flow['customer_email'],
@@ -423,20 +532,16 @@ class TableSelectionController extends Controller
                 'valid_until' => Carbon::parse($reservation->reservation_date->toDateString() . ' ' . $reservation->end_time, config('reservation.timezone')),
                 'is_active' => false,
             ]);
-            $storedProofPath = $proofFile->store("payment-proofs/{$reservation->reservations_id}", 'local');
-            if (! $storedProofPath) {
-                throw ValidationException::withMessages(['payment_proof' => 'Bukti pembayaran gagal disimpan. Silakan pilih file dan coba lagi.']);
-            }
             Payment::create([
                 'reservations_id' => $reservation->reservations_id,
                 'payment_method' => 'bank_transfer',
-                'bank_destination' => substr((string) config('reservation.bank.account_number', 'unconfigured'), 0, 50),
+                'bank_destination' => substr($this->settings->bankAccountNumber() ?: 'unconfigured', 0, 50),
                 'amount' => $reservation->grand_total,
-                'payment_status' => 'pending_verification',
-                'proof_file_path' => $storedProofPath,
-                'proof_uploaded_at' => now(),
+                'payment_status' => 'unpaid',
             ]);
-            $reservation->tables()->attach($table->tables_id);
+            if ($table) {
+                $reservation->tables()->attach($table->tables_id);
+            }
             foreach ($requestedItems as $menuItemId => $quantity) {
                 $menuItem = $menuItems[$menuItemId];
                 $unitPrice = (float) $menuItem->price;
@@ -457,7 +562,8 @@ class TableSelectionController extends Controller
                 'new_values' => [
                     'reservation_status' => $reservation->reservation_status,
                     'outlets_id' => $reservation->outlets_id,
-                    'tables_id' => $table->tables_id,
+                    'outlet_contents_id' => $reservation->outlet_contents_id,
+                    'tables_id' => $table?->tables_id,
                     'reservation_date' => $reservation->reservation_date->toDateString(),
                     'start_time' => $reservation->start_time,
                     'end_time' => $reservation->end_time,
@@ -469,15 +575,8 @@ class TableSelectionController extends Controller
                 ],
             ]);
 
-                return $reservation;
-            });
-        } catch (\Throwable $exception) {
-            if ($storedProofPath) {
-                Storage::disk('local')->delete($storedProofPath);
-            }
-
-            throw $exception;
-        }
+            return $reservation;
+        });
 
         if (! $reservation) {
             $flow['step'] = 'tables';
@@ -486,6 +585,18 @@ class TableSelectionController extends Controller
 
             return redirect()->route('reservasi.outlet', ['outlet' => $outlet->code, 'step' => 'tables'])
                 ->withErrors(['hold' => __('ui.hold_expired')]);
+        }
+
+        if ($request->hasFile('payment_proof')) {
+            $file = $request->file('payment_proof');
+            $path = $file->store("payment-proofs/{$reservation->reservations_id}", 'local');
+            if ($path) {
+                $reservation->latestPayment()->update([
+                    'payment_status' => 'pending_verification',
+                    'proof_file_path' => $path,
+                    'proof_uploaded_at' => now(),
+                ]);
+            }
         }
 
         $request->session()->put($this->confirmationKey($outlet->code), $reservation->reservation_code);
@@ -503,7 +614,7 @@ class TableSelectionController extends Controller
         $outlet = $this->findOutlet($outlet);
         abort_unless($this->canViewReservation($request, $outlet, $code), 404);
 
-        $reservation = Reservation::with(['tables.area', 'items', 'latestPayment', 'qrToken'])
+        $reservation = Reservation::with(['tables.area', 'items', 'latestPayment', 'qrToken', 'eventContent'])
             ->where('outlets_id', $outlet->outlets_id)
             ->where('reservation_code', $code)
             ->firstOrFail();
@@ -511,7 +622,7 @@ class TableSelectionController extends Controller
         if (! $reservation->latestPayment) {
             $reservation->payments()->create([
                 'payment_method' => 'bank_transfer',
-                'bank_destination' => substr((string) config('reservation.bank.account_number', 'unconfigured'), 0, 50),
+                'bank_destination' => substr($this->settings->bankAccountNumber() ?: 'unconfigured', 0, 50),
                 'amount' => $reservation->grand_total,
                 'payment_status' => 'unpaid',
             ]);
@@ -538,7 +649,7 @@ class TableSelectionController extends Controller
     public function downloadQr(Request $request, string $outlet, string $code)
     {
         $outlet = $this->findOutlet($outlet);
-        abort_unless($request->session()->get($this->confirmationKey($outlet->code)) === $code, 404);
+        abort_unless($this->canViewReservation($request, $outlet, $code), 404);
 
         $reservation = Reservation::with(['qrToken', 'latestPayment'])
             ->where('outlets_id', $outlet->outlets_id)
@@ -553,36 +664,37 @@ class TableSelectionController extends Controller
             'QR reservasi tersedia setelah pembayaran dikonfirmasi finance.',
         );
 
-        $svg = app(ReservationQrCode::class)->svg($reservation->qrToken->token);
+        $png = app(ReservationQrCode::class)->png($reservation->qrToken->token);
 
         return response()->streamDownload(
-            static function () use ($svg): void {
-                echo $svg;
+            static function () use ($png): void {
+                echo $png;
             },
-            $reservation->reservation_code . '-qr.svg',
-            ['Content-Type' => 'image/svg+xml', 'Cache-Control' => 'private, no-store'],
+            $reservation->reservation_code . '-qr.png',
+            ['Content-Type' => 'image/png', 'Cache-Control' => 'private, no-store'],
         );
     }
 
     public function uploadPaymentProof(Request $request, string $outlet, string $code): RedirectResponse
     {
         $outlet = $this->findOutlet($outlet);
-        abort_unless($request->session()->get($this->confirmationKey($outlet->code)) === $code, 404);
+        abort_unless($this->canViewReservation($request, $outlet, $code), 404);
         $validated = $request->validate([
             'payment_proof' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:5120'],
         ]);
         $reservation = Reservation::where('outlets_id', $outlet->outlets_id)
             ->where('reservation_code', $code)
             ->firstOrFail();
-        abort_if($reservation->reservation_status === 'confirmed', 409, 'Reservasi ini sudah dikonfirmasi.');
+        abort_unless($reservation->reservation_status === 'pending_payment', 409, 'Reservasi ini tidak lagi menunggu pembayaran.');
         $payment = $reservation->payments()->latest('payments_id')->firstOrFail();
-        abort_if($payment->payment_status === 'paid', 409, 'Pembayaran ini sudah diterima.');
+        abort_unless(in_array($payment->payment_status, ['unpaid', 'rejected'], true), 409, 'Bukti pembayaran ini sedang atau sudah diverifikasi.');
 
         $file = $validated['payment_proof'];
         $path = $file->store("payment-proofs/{$reservation->reservations_id}", 'local');
-        if ($payment->proof_file_path) {
-            Storage::disk('local')->delete($payment->proof_file_path);
+        if (! $path) {
+            throw ValidationException::withMessages(['payment_proof' => __('confirm.err_proof_not_saved')]);
         }
+        $oldPath = $payment->proof_file_path;
         $payment->update([
             'proof_file_path' => $path,
             'proof_uploaded_at' => now(),
@@ -591,6 +703,9 @@ class TableSelectionController extends Controller
             'users_id_verified_by' => null,
             'rejection_reason' => null,
         ]);
+        if ($oldPath) {
+            Storage::disk('local')->delete($oldPath);
+        }
 
         return redirect()->route('reservasi.confirmation', ['outlet' => $outlet->code, 'code' => $code])
             ->with('payment_submitted', true);

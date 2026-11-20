@@ -48,6 +48,7 @@ class ContentController extends Controller
         unset($data['image']);
         $content = DB::transaction(function () use ($data, $request, $audit): OutletContent {
             $content = OutletContent::create($data);
+            $content->syncPromotionMenuItem();
             $audit->record($request, 'admin_outlet_content_created', 'outlet_content', $content->outlet_contents_id, null, $this->snapshot($content->load('outlet')));
             return $content;
         });
@@ -58,11 +59,13 @@ class ContentController extends Controller
     public function update(Request $request, OutletContent $outletContent, AdminAuditLogger $audit): RedirectResponse
     {
         $old = $this->snapshot($outletContent->load('outlet'));
+        $previousTitle = $outletContent->title;
         $data = $this->validated($request);
         if ($request->hasFile('image')) $data['image_path'] = $request->file('image')->store('outlet-content', 'public');
         unset($data['image']);
-        DB::transaction(function () use ($outletContent, $data, $request, $audit, $old): void {
+        DB::transaction(function () use ($outletContent, $data, $request, $audit, $old, $previousTitle): void {
             $outletContent->update($data);
+            $outletContent->syncPromotionMenuItem($previousTitle);
             $audit->record($request, 'admin_outlet_content_updated', 'outlet_content', $outletContent->outlet_contents_id, $old, $this->snapshot($outletContent->fresh()->load('outlet')));
         });
 
@@ -79,15 +82,27 @@ class ContentController extends Controller
             'starts_on' => ['nullable', 'date'],
             'ends_on' => ['nullable', 'date', Rule::when($request->filled('starts_on'), ['after_or_equal:starts_on'])],
             'status' => ['required', Rule::in(['draft', 'published', 'inactive'])],
+            'requires_table' => ['nullable', 'boolean'],
+            'requires_menu' => ['nullable', 'boolean'],
+            'price_per_pax' => ['nullable', 'numeric', 'min:0', 'max:999999999'],
             'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
         ]);
         unset($data['image']);
+
+        $data['price_per_pax'] = (float) ($data['price_per_pax'] ?? 0);
+        if ($data['content_type'] === 'event') {
+            $data['requires_table'] = $request->boolean('requires_table');
+            $data['requires_menu'] = $request->boolean('requires_menu');
+        } else {
+            $data['requires_table'] = true;
+            $data['requires_menu'] = true;
+        }
 
         return $data;
     }
 
     private function snapshot(OutletContent $content): array
     {
-        return ['outlet' => $content->outlet?->name, 'content_type' => $content->content_type, 'title' => $content->title, 'description' => $content->description, 'starts_on' => $content->starts_on?->toDateString(), 'ends_on' => $content->ends_on?->toDateString(), 'status' => $content->status, 'image_path' => $content->image_path];
+        return ['outlet' => $content->outlet?->name, 'content_type' => $content->content_type, 'title' => $content->title, 'description' => $content->description, 'starts_on' => $content->starts_on?->toDateString(), 'ends_on' => $content->ends_on?->toDateString(), 'status' => $content->status, 'requires_table' => (bool) $content->requires_table, 'requires_menu' => (bool) $content->requires_menu, 'price_per_pax' => (float) $content->price_per_pax, 'image_path' => $content->image_path];
     }
 }

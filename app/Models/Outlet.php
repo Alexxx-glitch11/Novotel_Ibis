@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Outlet extends Model
 {
@@ -42,9 +43,9 @@ class Outlet extends Model
             ->orderBy('name');
     }
 
-    public function users(): HasMany
+    public function users(): BelongsToMany
     {
-        return $this->hasMany(User::class, 'outlets_id', 'outlets_id');
+        return $this->belongsToMany(User::class, 'user_outlets', 'outlets_id', 'users_id', 'outlets_id', 'users_id');
     }
 
     public function areas(): HasMany

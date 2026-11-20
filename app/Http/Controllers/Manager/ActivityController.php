@@ -8,6 +8,7 @@ use App\Models\CancellationRequest;
 use App\Models\Payment;
 use App\Models\Reservation;
 use App\Models\User;
+use App\Services\OutletAccess;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -37,7 +38,7 @@ class ActivityController extends Controller
             'q' => trim($filters['q'] ?? ''),
         ];
 
-        $period = $this->periodQuery($filters['range']);
+        $period = app(OutletAccess::class)->scopeAudit($this->periodQuery($filters['range']), $request->user());
         $filtered = $this->applyFilters(clone $period, $filters);
 
         $summary = [
@@ -55,7 +56,8 @@ class ActivityController extends Controller
             ->withQueryString();
 
         $this->decorate($activities->getCollection());
-        $actors = User::query()->whereHas('auditLogs')->orderBy('name')->get(['users_id', 'name']);
+        $visibleActorIds = (clone $period)->select('users_id')->whereNotNull('users_id')->distinct();
+        $actors = User::query()->whereIn('users_id', $visibleActorIds)->orderBy('name')->get(['users_id', 'name']);
 
         return view('manager.activities.index', compact('filters', 'summary', 'activities', 'actors'));
     }

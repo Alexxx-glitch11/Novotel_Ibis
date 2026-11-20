@@ -1,24 +1,30 @@
 <?php
 
+use App\Http\Controllers\Auth\LoginController as AuthLoginController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\ConfigurationController;
 use App\Http\Controllers\Admin\ContentController;
 use App\Http\Controllers\Admin\DashboardController;
-use App\Http\Controllers\Admin\LoginController;
 use App\Http\Controllers\Admin\MasterDataController;
 use App\Http\Controllers\Admin\MenuController;
+use App\Http\Controllers\Admin\ReservationController;
 use App\Http\Controllers\Admin\TableController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\LiveUpdatesController;
 use App\Http\Middleware\EnsureAdmin;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/admin/login', [LoginController::class, 'create'])->name('admin.login');
-Route::post('/admin/login', [LoginController::class, 'store'])->middleware('throttle:6,1')->name('admin.login.store');
+Route::get('/admin/login', fn () => redirect()->route('login'))->name('admin.login');
+Route::post('/admin/logout', [AuthLoginController::class, 'destroy'])->name('admin.logout');
 
 Route::middleware(EnsureAdmin::class)->prefix('admin')->name('admin.')->group(function (): void {
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/live-status', [LiveUpdatesController::class, 'status'])->name('live-status');
+    Route::get('/reservations', [ReservationController::class, 'index'])->name('reservations.index');
+    Route::get('/reservations/{reservation}', [ReservationController::class, 'show'])->whereNumber('reservation')->name('reservations.show');
     Route::get('/outlets', [MasterDataController::class, 'index'])->name('outlets.index');
     Route::post('/outlets', [MasterDataController::class, 'storeOutlet'])->name('outlets.store');
+    Route::put('/outlets/{outlet}/toggle', [MasterDataController::class, 'toggleOutlet'])->whereNumber('outlet')->name('outlets.toggle');
     Route::post('/areas', [MasterDataController::class, 'storeArea'])->name('areas.store');
     Route::get('/tables', [TableController::class, 'index'])->name('tables.index');
     Route::post('/tables', [TableController::class, 'store'])->name('tables.store');
@@ -29,6 +35,7 @@ Route::middleware(EnsureAdmin::class)->prefix('admin')->name('admin.')->group(fu
     Route::post('/menu/categories', [MenuController::class, 'storeCategory'])->name('menu.categories.store');
     Route::get('/users', [UserController::class, 'index'])->name('users.index');
     Route::post('/users', [UserController::class, 'store'])->name('users.store');
+    Route::put('/users/{user}/outlet', [UserController::class, 'updateOutlet'])->whereNumber('user')->name('users.outlet');
     Route::post('/users/{user}/toggle', [UserController::class, 'toggle'])->whereNumber('user')->name('users.toggle');
     Route::get('/content', [ContentController::class, 'index'])->name('content.index');
     Route::post('/content', [ContentController::class, 'store'])->name('content.store');

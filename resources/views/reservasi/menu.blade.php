@@ -90,7 +90,12 @@
 
         <aside class="rounded-2xl bg-white p-5 ring-1 ring-slate-200 lg:sticky lg:top-24">
             <h2 class="border-b border-slate-100 pb-3 text-base font-bold text-[#252942]">{{ __('ui.order_summary') }}</h2>
-            <p class="mt-4 text-xs text-slate-500">{{ __('ui.table_word') }} {{ $selectedTable?->table_code }} · {{ $selectedTable?->area?->name }}</p>
+            <p class="mt-4 text-xs text-slate-500">{{ $selectedTable ? (__('ui.table_word') . ' ' . $selectedTable->table_code . ' · ' . $selectedTable->area?->name) : 'Tanpa pilih kursi (Mengikuti Event)' }}</p>
+            @if (! empty($flow['event_title']))
+                <p class="mt-1 text-xs font-semibold text-[#24215f]">Event: {{ $flow['event_title'] }}</p>
+            @elseif (! empty($flow['promo_id']))
+                <p class="mt-1 text-xs font-semibold text-[#24215f]">Promosi: {{ $flow['promo_title'] ?? '' }}</p>
+            @endif
             <div id="menu-order-summary" class="mt-3 space-y-2 text-sm"></div>
             <div class="mt-4 flex justify-between border-t border-slate-100 pt-3 text-sm font-bold text-[#252942]"><span>{{ __('ui.subtotal') }}</span><span id="menu-subtotal">Rp 0</span></div>
             <button type="submit" class="mt-5 min-h-11 w-full rounded-lg bg-[#24215f] px-4 text-sm font-semibold text-white transition hover:bg-[#181644]">{{ __('ui.continue_to_confirmation') }}</button>
@@ -177,7 +182,14 @@
     }));
     search?.addEventListener('input', filterMenus);
     clearSearch?.addEventListener('click', () => { search.value = ''; filterMenus(); search.focus(); });
-    filterMenus();
+    const autoPromoBtn = @json(! empty($flow['promo_id']))
+        ? Array.from(categoryButtons).find(btn => (btn.dataset.menuCategory || '').trim().toLowerCase() === 'promosi')
+        : null;
+    if (autoPromoBtn) {
+        autoPromoBtn.click();
+    } else {
+        filterMenus();
+    }
 
     const countdown = document.getElementById('hold-countdown');
     const deadline = Number(countdown.dataset.expires) * 1000;

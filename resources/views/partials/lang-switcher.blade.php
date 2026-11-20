@@ -1,5 +1,5 @@
 @php $current = app()->getLocale(); @endphp
-<div class="relative" data-lang-switcher>
+<div class="relative" data-lang-switcher translate="no">
     <button type="button" data-lang-toggle aria-haspopup="true" aria-expanded="false" aria-label="{{ __('manager.language') }}"
             class="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-slate-700 hover:bg-black/5">
         @include('partials.flag', ['code' => $current])

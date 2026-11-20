@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Carbon;
 
 class Reservation extends Model
 {
@@ -21,6 +22,7 @@ class Reservation extends Model
     protected $fillable = [
         'reservation_code',
         'outlets_id',
+        'outlet_contents_id',
         'users_id',
         'customer_name',
         'customer_phone',
@@ -56,6 +58,11 @@ class Reservation extends Model
     public function outlet(): BelongsTo
     {
         return $this->belongsTo(Outlet::class, 'outlets_id', 'outlets_id');
+    }
+
+    public function eventContent(): BelongsTo
+    {
+        return $this->belongsTo(OutletContent::class, 'outlet_contents_id', 'outlet_contents_id');
     }
 
     public function user(): BelongsTo
@@ -96,5 +103,33 @@ class Reservation extends Model
     public function cancellationRequests(): HasMany
     {
         return $this->hasMany(CancellationRequest::class, 'reservations_id', 'reservations_id');
+    }
+
+    /**
+     * Hasilkan kode reservasi unik dengan prefix outlet dan tanggal kunjungan,
+     * diikuti akhiran acak 6 karakter kriptografis (Crockford-32 tanpa 0/O/1/I).
+     * Contoh: RRMS-NOVFE-2011-7K9M4X, RRMS-IBISK-2011-3P8W2Q.
+     */
+    public static function generateCode(Outlet $outlet, string $reservationDate): string
+    {
+        $codeLower = strtolower((string) $outlet->code);
+        $prefix = match ($codeLower) {
+            'novotel' => 'NOVFE',
+            'ibis' => 'IBISK',
+            default => substr(preg_replace('/[^A-Z0-9]/', '', strtoupper($outlet->code)) ?: 'OUTLT', 0, 5),
+        };
+        $datePart = Carbon::parse($reservationDate)->format('dm');
+        $alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+        $maxIndex = strlen($alphabet) - 1;
+
+        do {
+            $suffix = '';
+            for ($i = 0; $i < 6; $i++) {
+                $suffix .= $alphabet[random_int(0, $maxIndex)];
+            }
+            $candidate = sprintf('RRMS-%s-%s-%s', $prefix, $datePart, $suffix);
+        } while (self::where('reservation_code', $candidate)->exists());
+
+        return $candidate;
     }
 }

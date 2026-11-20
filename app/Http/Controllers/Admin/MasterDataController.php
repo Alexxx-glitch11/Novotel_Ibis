@@ -36,7 +36,29 @@ class MasterDataController extends Controller
             return $outlet;
         });
 
-        return back()->with('success', 'Outlet berhasil ditambahkan. Jam operasional belum dikonfigurasi pada skema saat ini.');
+        return back()->with('success', 'Outlet berhasil ditambahkan.');
+    }
+
+    public function toggleOutlet(Request $request, Outlet $outlet, AdminAuditLogger $audit): RedirectResponse
+    {
+        $activate = $request->boolean('is_active');
+        $old = ['is_active' => (bool) $outlet->is_active];
+
+        if ((bool) $outlet->is_active !== $activate) {
+            DB::transaction(function () use ($outlet, $activate, $old, $request, $audit): void {
+                $outlet->update(['is_active' => $activate]);
+                $audit->record(
+                    $request,
+                    $activate ? 'admin_outlet_activated' : 'admin_outlet_deactivated',
+                    'outlet',
+                    (int) $outlet->outlets_id,
+                    $old,
+                    ['is_active' => $activate, 'name' => $outlet->name],
+                );
+            });
+        }
+
+        return back()->with('success', 'Outlet ' . $outlet->name . ' berhasil ' . ($activate ? 'diaktifkan.' : 'dinonaktifkan.'));
     }
 
     public function storeArea(Request $request, AdminAuditLogger $audit): RedirectResponse

@@ -56,18 +56,19 @@ class GuestReservationController extends Controller
             ->with([
                 'outlet',
                 'tables.area',
+                'latestPayment',
                 'cancellationRequests' => fn ($q) => $q->latest('cancellation_requests_id'),
             ]);
 
         $active = (clone $base)
             ->whereIn('reservation_status', self::ACTIVE)
-            ->orderBy('reservation_date')->orderBy('start_time')
+            ->orderByDesc('created_at')->orderByDesc('reservations_id')
             ->get()
             ->each(fn (Reservation $r) => $this->decorate($r));
 
         $history = (clone $base)
             ->whereIn('reservation_status', self::HISTORY)
-            ->orderByDesc('reservation_date')->orderByDesc('start_time')
+            ->orderByDesc('created_at')->orderByDesc('reservations_id')
             ->limit(50)
             ->get()
             ->each(fn (Reservation $r) => $this->decorate($r));
@@ -310,6 +311,7 @@ class GuestReservationController extends Controller
             ->with([
                 'outlet',
                 'tables.area',
+                'latestPayment',
                 'cancellationRequests' => fn ($q) => $q->latest('cancellation_requests_id'),
             ])
             ->where('reservation_code', strtoupper($code))

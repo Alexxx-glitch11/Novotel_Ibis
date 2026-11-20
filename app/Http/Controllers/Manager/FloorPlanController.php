@@ -7,11 +7,13 @@ use App\Models\Area;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use App\Services\OutletAccess;
 
 class FloorPlanController extends Controller
 {
     public function store(Request $request, Area $area): RedirectResponse
     {
+        app(OutletAccess::class)->assertCanAccess($request->user(), (int) $area->outlets_id);
         $request->validate([
             'floor_plan' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
         ], [
@@ -34,6 +36,7 @@ class FloorPlanController extends Controller
 
     public function destroy(Area $area): RedirectResponse
     {
+        app(OutletAccess::class)->assertCanAccess(request()->user(), (int) $area->outlets_id);
         if ($area->floor_plan_path) {
             Storage::disk('public')->delete($area->floor_plan_path);
             $area->update(['floor_plan_path' => null]);

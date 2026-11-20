@@ -17,7 +17,6 @@
         @foreach ($outlets as $o)
             @php
                 $active  = (bool) $o->is_active;
-                $primary = $o->code === \App\Models\Outlet::PRIMARY_CODE;
                 $confirm = $active
                     ? ($o->upcoming_count > 0
                         ? __('manager.out_confirm_off_warn', ['name' => $o->name, 'count' => $o->upcoming_count])
@@ -32,9 +31,6 @@
                         <p class="mt-1 text-xs text-slate-500">{{ __('manager.out_code_label') }}: <span class="font-mono">{{ $o->code }}</span></p>
                     </div>
                     <div class="flex flex-wrap gap-2">
-                        @if ($primary)
-                            <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-[#1f1d5c]">{{ __('manager.out_primary') }}</span>
-                        @endif
                         <span class="rounded-full px-3 py-1 text-xs font-semibold {{ $active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500' }}">
                             {{ $active ? __('manager.st_active') : __('manager.st_inactive') }}
                         </span>

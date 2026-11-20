@@ -143,3 +143,130 @@ document.addEventListener('DOMContentLoaded', () => {
     hero.addEventListener('mouseenter', stop);   // berhenti saat kursor di hero
     hero.addEventListener('mouseleave', start);
 });
+
+document.addEventListener('DOMContentLoaded', () => {
+    const carousel = document.getElementById('event-carousel');
+    if (!carousel) return;
+
+    const track = carousel.querySelector('.ev-track');
+    const prevBtn = carousel.querySelector('[data-ev-prev]');
+    const nextBtn = carousel.querySelector('[data-ev-next]');
+    const dotsBox = carousel.querySelector('.ev-dots');
+    const cards = Array.from(carousel.querySelectorAll('.ev-card'));
+    if (!track || !cards.length) return;
+
+    const gapPx = 20;
+    let dots = [];
+    let rafId = null;
+
+    function metrics() {
+        const cardWidth = cards[0].getBoundingClientRect().width || 300;
+        const step = cardWidth + gapPx;
+        const visibleCount = Math.max(1, Math.round((track.clientWidth + gapPx) / step));
+        const maxStep = Math.max(0, cards.length - visibleCount);
+        const canScroll = track.scrollWidth > track.clientWidth + 4;
+        return { step, maxStep, canScroll };
+    }
+
+    function buildDots(maxStep, canScroll) {
+        if (!dotsBox) return;
+        const count = canScroll ? maxStep + 1 : 0;
+        if (dots.length === count) return;
+        dotsBox.innerHTML = '';
+        dots = [];
+        if (count <= 1) {
+            dotsBox.hidden = true;
+            return;
+        }
+        for (let i = 0; i < count; i++) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.setAttribute('aria-label', 'Slide event ' + (i + 1));
+            btn.addEventListener('click', () => {
+                const { step } = metrics();
+                const maxScroll = Math.max(0, track.scrollWidth - track.clientWidth);
+                const targetLeft = i === count - 1 ? maxScroll : Math.min(maxScroll, i * step);
+                track.scrollTo({ left: targetLeft, behavior: 'smooth' });
+            });
+            dotsBox.appendChild(btn);
+            dots.push(btn);
+        }
+        dotsBox.hidden = false;
+    }
+
+    function syncControls() {
+        const { step, maxStep, canScroll } = metrics();
+        track.classList.toggle('ev-centered', !canScroll);
+        if (prevBtn) prevBtn.hidden = !canScroll;
+        if (nextBtn) nextBtn.hidden = !canScroll;
+
+        buildDots(maxStep, canScroll);
+
+        const maxScroll = Math.max(0, track.scrollWidth - track.clientWidth);
+        if (prevBtn) prevBtn.disabled = track.scrollLeft <= 4;
+        if (nextBtn) nextBtn.disabled = track.scrollLeft >= maxScroll - 4;
+
+        if (dots.length > 0) {
+            const active = track.scrollLeft >= maxScroll - 8
+                ? dots.length - 1
+                : Math.min(dots.length - 1, Math.max(0, Math.round(track.scrollLeft / step)));
+            dots.forEach((dot, idx) => dot.classList.toggle('active', idx === active));
+        }
+    }
+
+    prevBtn?.addEventListener('click', () => {
+        const { step } = metrics();
+        track.scrollBy({ left: -step, behavior: 'smooth' });
+    });
+
+    nextBtn?.addEventListener('click', () => {
+        const { step } = metrics();
+        track.scrollBy({ left: step, behavior: 'smooth' });
+    });
+
+    track.addEventListener('scroll', () => {
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(syncControls);
+    }, { passive: true });
+
+    // Dukungan geser pakai mouse di desktop tanpa mengganggu klik tautan
+    let dragging = false;
+    let dragged = false;
+    let startX = 0;
+    let startScroll = 0;
+
+    track.addEventListener('pointerdown', (e) => {
+        if (e.pointerType !== 'mouse' || e.button !== 0) return;
+        if (e.target.closest('a, button')) return;
+        dragging = true;
+        dragged = false;
+        startX = e.clientX;
+        startScroll = track.scrollLeft;
+        track.classList.add('ev-dragging');
+    });
+
+    window.addEventListener('pointermove', (e) => {
+        if (!dragging) return;
+        const dx = e.clientX - startX;
+        if (Math.abs(dx) > 6) dragged = true;
+        track.scrollLeft = startScroll - dx;
+    });
+
+    const stopDrag = () => {
+        if (!dragging) return;
+        dragging = false;
+        track.classList.remove('ev-dragging');
+    };
+    window.addEventListener('pointerup', stopDrag);
+    window.addEventListener('pointercancel', stopDrag);
+
+    track.addEventListener('click', (e) => {
+        if (dragged) {
+            e.preventDefault();
+            dragged = false;
+        }
+    }, true);
+
+    window.addEventListener('resize', syncControls);
+    syncControls();
+});
